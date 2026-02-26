@@ -23,6 +23,14 @@ export function initDatabase(): Pool {
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
+    // Only enable SSL for cloud providers (Render, AWS, etc.)
+    // Disable for local/Docker connections (localhost, 127.0.0.1, or no dot in hostname)
+    ssl: process.env.DATABASE_SSL === 'true' ||
+      (!connectionString.includes('localhost') &&
+       !connectionString.includes('127.0.0.1') &&
+       connectionString.match(/@[^/]*\.[^/]*\./))  // hostname has at least two dots (e.g. host.region.render.com)
+      ? { rejectUnauthorized: false }
+      : false,
   });
 
   pool.on('error', (err) => {

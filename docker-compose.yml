@@ -67,7 +67,12 @@ services:
       - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./database/migrations/001_add_risk_hotspots.sql:/docker-entrypoint-initdb.d/02_001.sql:ro
+      - ./database/migrations/002_add_runtime_tables.sql:/docker-entrypoint-initdb.d/03_002.sql:ro
+      - ./database/migrations/003_add_settings_table.sql:/docker-entrypoint-initdb.d/04_003.sql:ro
+      - ./database/migrations/004_add_trigger_source.sql:/docker-entrypoint-initdb.d/05_004.sql:ro
+      - ./database/migrations/005_add_jira_metrics_and_reports.sql:/docker-entrypoint-initdb.d/06_005.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keelo -d keelo"]
       interval: 5s
