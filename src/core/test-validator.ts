@@ -1,5 +1,14 @@
 import { logger } from '../config/index.js';
-import ts from 'typescript';
+
+// Dynamic import - typescript is a devDependency and not available in production.
+// Syntax validation degrades gracefully (skipped) when not available.
+let ts: typeof import('typescript') | null = null;
+try {
+  const mod = await import('typescript');
+  ts = mod.default ?? mod;
+} catch {
+  logger.warn('TypeScript compiler not available — syntax validation will be skipped');
+}
 
 // =============================================================================
 // Types
@@ -53,6 +62,11 @@ export function validateTestSyntax(code: string, filename: string): ValidationRe
 }
 
 function checkTypeScriptSyntax(code: string, filename: string): ValidationError[] {
+  // Graceful degradation: skip TS syntax validation if compiler is not available
+  if (!ts) {
+    return [];
+  }
+
   const errors: ValidationError[] = [];
 
   try {
