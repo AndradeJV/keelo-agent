@@ -2,16 +2,14 @@
   <defs>
     <linearGradient id="keelo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#34d399"/>
+      <stop offset="50%" stop-color="#10b981"/>
       <stop offset="100%" stop-color="#059669"/>
     </linearGradient>
   </defs>
-  <!-- Rounded square background -->
-  <rect x="10" y="10" width="180" height="180" rx="40" fill="url(#keelo-grad)"/>
-  <!-- K letter with integrated checkmark -->
-  <path d="M65 55 L65 145" stroke="white" stroke-width="16" stroke-linecap="round"/>
-  <path d="M65 100 L115 55" stroke="white" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M65 100 L105 145" stroke="white" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- Checkmark accent -->
-  <path d="M115 115 L130 130 L155 90" stroke="white" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+  <!-- Background -->
+  <rect x="10" y="10" width="180" height="180" rx="42" fill="url(#keelo-grad)"/>
+  <!-- Quality seal circle -->
+  <circle cx="100" cy="100" r="52" stroke="white" stroke-width="3.5" fill="none" opacity="0.3"/>
+  <!-- Bold checkmark -->
+  <polyline points="72,102 90,120 130,76" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
 </svg>
-
