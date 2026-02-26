@@ -22,10 +22,19 @@ services:
       - CORS_ORIGIN=${CORS_ORIGIN:-*}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
       - JWT_SECRET=${JWT_SECRET:-keelo-dev-secret-change-in-production}
       - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_USERNAME=${ADMIN_USERNAME}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - BASE_URL=${BASE_URL:-http://localhost:3000}
     volumes:
       - ./.keelo.json:/app/.keelo.json:ro
       - ./prompts:/app/prompts:ro
@@ -51,6 +60,7 @@ services:
     environment:
       - VITE_API_URL=http://keelo-api:3000
       - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - VITE_GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
     depends_on:
       - keelo-api
     restart: unless-stopped
@@ -80,6 +90,7 @@ services:
       - ./database/migrations/006_add_users_and_auth.sql:/docker-entrypoint-initdb.d/07_006.sql:ro
       - ./database/migrations/007_add_organizations_and_projects.sql:/docker-entrypoint-initdb.d/08_007.sql:ro
       - ./database/migrations/008_add_username_password_auth.sql:/docker-entrypoint-initdb.d/09_008.sql:ro
+      - ./database/migrations/009_add_email_verification_and_github.sql:/docker-entrypoint-initdb.d/10_009.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keelo -d keelo"]
       interval: 5s

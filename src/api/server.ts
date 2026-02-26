@@ -34,6 +34,7 @@ import { requireAuth, optionalAuth } from './middleware/auth.js';
 import type { WebhookPayload, IssueCommentPayload } from '../core/types.js';
 import { enforceHybridModeAtStartup, getPRTriggerDecision } from '../core/trigger-mode.js';
 import { startWeeklyReportScheduler } from '../core/weekly-report-scheduler.js';
+import { initEmailService } from '../services/email.js';
 
 // =============================================================================
 // Express App Setup
@@ -727,6 +728,9 @@ export async function startServer(): Promise<void> {
   
   // Seed admin user
   await seedAdminUser();
+  
+  // Initialize email service
+  initEmailService();
   
   // Load configuration from database
   try {

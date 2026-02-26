@@ -10,6 +10,7 @@ import QAHealth from './pages/QAHealth';
 import ProductInsights from './pages/ProductInsights';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Callback from './pages/Callback';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -37,6 +38,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route path="/callback" element={<Callback />} />
       
       <Route
