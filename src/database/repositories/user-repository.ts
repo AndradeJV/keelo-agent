@@ -161,12 +161,26 @@ export async function createUserWithPassword(data: {
 /**
  * Seed the admin user if it doesn't exist.
  * Called at startup.
+ *
+ * Reads credentials from env vars:
+ *   ADMIN_USERNAME  (required to seed)
+ *   ADMIN_PASSWORD  (required to seed)
+ *   ADMIN_EMAIL     (optional, defaults to admin@keelo.dev)
+ *
+ * If neither ADMIN_USERNAME nor ADMIN_PASSWORD is set, seeding is skipped silently.
  */
 export async function seedAdminUser(): Promise<void> {
   if (!isDatabaseEnabled()) return;
 
-  const adminUsername = 'AdminKeelo';
-  const adminPassword = 'Admin@Keelo21377';
+  const adminUsername = process.env.ADMIN_USERNAME;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminUsername || !adminPassword) {
+    logger.debug('ADMIN_USERNAME / ADMIN_PASSWORD not set — skipping admin seed');
+    return;
+  }
+
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@keelo.dev';
 
   try {
     const existing = await findUserByUsername(adminUsername);
@@ -178,8 +192,8 @@ export async function seedAdminUser(): Promise<void> {
     await createUserWithPassword({
       username: adminUsername,
       password: adminPassword,
-      email: 'admin@keelo.dev',
-      name: 'Admin Keelo',
+      email: adminEmail,
+      name: adminUsername,
       role: 'admin',
     });
 

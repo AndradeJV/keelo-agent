@@ -21,6 +21,7 @@ import {
   completeRequirementsAnalysis,
   markAnalysisFailed,
   seedAdminUser,
+  runMigrations,
 } from '../database/index.js';
 import { notifyRequirementsAnalysisComplete } from '../integrations/slack/index.js';
 import historyRoutes from './routes/history.js';
@@ -720,6 +721,9 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 export async function startServer(): Promise<void> {
   // Initialize database
   initDatabase();
+  
+  // Run pending migrations
+  await runMigrations();
   
   // Seed admin user
   await seedAdminUser();

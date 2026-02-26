@@ -168,6 +168,15 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
     headers,
   });
 
+  // Token expired or invalid — force logout and redirect to login
+  if (response.status === 401) {
+    localStorage.removeItem('keelo_token');
+    localStorage.removeItem('keelo_user');
+    localStorage.removeItem('keelo_demo_auth');
+    window.location.href = '/login';
+    throw new Error('Sessão expirada. Redirecionando para login...');
+  }
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Unknown error' }));
     throw new Error(error.error || error.message || `HTTP ${response.status}`);

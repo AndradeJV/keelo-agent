@@ -114,6 +114,8 @@ export {
   type ProjectWithStats,
 } from './repositories/project-repository.js';
 
+export { runMigrations } from './migrator.js';
+
 export {
   classifyBugOrigin,
   upsertJiraBugEvents,
