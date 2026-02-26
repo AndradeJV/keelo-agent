@@ -46,10 +46,51 @@ const DEMO_USER: User = {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 // =============================================================================
-// Inner Provider (needs GoogleOAuthProvider above it)
+// Demo Auth Provider (no Google dependency)
 // =============================================================================
 
-function AuthProviderInner({ children }: { children: ReactNode }) {
+function DemoAuthProvider({ children }: { children: ReactNode }) {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const savedAuth = localStorage.getItem('keelo_demo_auth');
+    if (savedAuth === 'true') {
+      setIsAuthenticated(true);
+      setUser(DEMO_USER);
+    }
+    setIsLoading(false);
+  }, []);
+
+  const login = useCallback(() => {
+    localStorage.setItem('keelo_demo_auth', 'true');
+    setIsAuthenticated(true);
+    setUser(DEMO_USER);
+  }, []);
+
+  const logout = useCallback(() => {
+    localStorage.removeItem('keelo_demo_auth');
+    setIsAuthenticated(false);
+    setUser(null);
+  }, []);
+
+  const getAccessToken = useCallback(async (): Promise<string | null> => {
+    return 'demo-token';
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ isAuthenticated, isLoading, user, login, logout, getAccessToken }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// =============================================================================
+// Google Auth Provider (uses useGoogleLogin — requires GoogleOAuthProvider)
+// =============================================================================
+
+function GoogleAuthProviderInner({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
@@ -58,17 +99,6 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY);
     const savedUser = localStorage.getItem(USER_KEY);
-
-    if (!isGoogleConfigured()) {
-      // Demo mode
-      const savedAuth = localStorage.getItem('keelo_demo_auth');
-      if (savedAuth === 'true') {
-        setIsAuthenticated(true);
-        setUser(DEMO_USER);
-      }
-      setIsLoading(false);
-      return;
-    }
 
     if (token && savedUser) {
       try {
@@ -83,14 +113,12 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  // Google login handler — gets access_token, exchanges for id_token via Google userinfo, then calls backend
   const googleLogin = useGoogleLogin({
     flow: 'auth-code',
     onSuccess: async (codeResponse) => {
       try {
         setIsLoading(true);
 
-        // Send the authorization code to our backend to exchange for tokens
         const res = await fetch(`${API_BASE}/auth/google`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -104,7 +132,6 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
 
         const data = await res.json();
 
-        // Save token and user
         localStorage.setItem(TOKEN_KEY, data.token);
         localStorage.setItem(USER_KEY, JSON.stringify(data.user));
         setUser(data.user);
@@ -121,46 +148,29 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
   });
 
   const login = useCallback(() => {
-    if (!isGoogleConfigured()) {
-      // Demo mode
-      localStorage.setItem('keelo_demo_auth', 'true');
-      setIsAuthenticated(true);
-      setUser(DEMO_USER);
-      return;
-    }
-
     googleLogin();
   }, [googleLogin]);
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
-    localStorage.removeItem('keelo_demo_auth');
     setIsAuthenticated(false);
     setUser(null);
   }, []);
 
   const getAccessToken = useCallback(async (): Promise<string | null> => {
-    if (!isGoogleConfigured()) {
-      return 'demo-token';
-    }
     return localStorage.getItem(TOKEN_KEY);
   }, []);
 
-  const value: AuthContextType = {
-    isAuthenticated,
-    isLoading,
-    user,
-    login,
-    logout,
-    getAccessToken,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ isAuthenticated, isLoading, user, login, logout, getAccessToken }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 // =============================================================================
-// Exported Provider (wraps with GoogleOAuthProvider)
+// Exported Provider
 // =============================================================================
 
 interface AuthProviderProps {
@@ -169,13 +179,12 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   if (!isGoogleConfigured()) {
-    // No Google config — render without OAuth provider (demo mode)
-    return <AuthProviderInner>{children}</AuthProviderInner>;
+    return <DemoAuthProvider>{children}</DemoAuthProvider>;
   }
 
   return (
     <GoogleOAuthProvider clientId={googleConfig.clientId}>
-      <AuthProviderInner>{children}</AuthProviderInner>
+      <GoogleAuthProviderInner>{children}</GoogleAuthProviderInner>
     </GoogleOAuthProvider>
   );
 }
@@ -192,5 +201,5 @@ export function useAuth(): AuthContextType {
   return context;
 }
 
-// Re-export for backwards compatibility
+// Re-export for Login page
 export { isGoogleConfigured };
