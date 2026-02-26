@@ -110,6 +110,47 @@ export interface Repository {
 }
 
 // =============================================================================
+// Organization & Project Types
+// =============================================================================
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  avatar: string | null;
+  owner_id: string;
+  member_role: 'owner' | 'admin' | 'member';
+  member_count?: number;
+  project_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrgMember {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  role: 'owner' | 'admin' | 'member';
+  user_email?: string;
+  user_name?: string;
+  user_avatar?: string;
+  joined_at: string;
+}
+
+export interface Project {
+  id: string;
+  organization_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  created_by: string | null;
+  analysis_count: number;
+  last_analysis_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// =============================================================================
 // API Functions
 // =============================================================================
 
@@ -707,5 +748,81 @@ export async function sendProductImpactToSlack(analysisId: string): Promise<{ su
 
 export async function getProductInsightsAggregate(days = 30): Promise<{ success: boolean; data: ProductInsightsAggregate }> {
   const response = await fetchWithAuth(`/product-impact/insights/aggregate?days=${days}`);
+  return response.json();
+}
+
+// =============================================================================
+// Organizations API
+// =============================================================================
+
+export async function getOrganizations(): Promise<{ success: boolean; data: Organization[] }> {
+  const response = await fetchWithAuth('/organizations');
+  return response.json();
+}
+
+export async function createOrganizationApi(data: {
+  name: string;
+  slug: string;
+  avatar?: string;
+}): Promise<{ success: boolean; data: Organization; error?: string }> {
+  const response = await fetchWithAuth('/organizations', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return response.json();
+}
+
+export async function deleteOrganizationApi(orgId: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  const response = await fetchWithAuth(`/organizations/${orgId}`, {
+    method: 'DELETE',
+  });
+  return response.json();
+}
+
+export async function getOrgMembers(orgId: string): Promise<{ success: boolean; data: OrgMember[] }> {
+  const response = await fetchWithAuth(`/organizations/${orgId}/members`);
+  return response.json();
+}
+
+export async function addOrgMemberApi(orgId: string, email: string, role = 'member'): Promise<{ success: boolean; data?: OrgMember; error?: string; message?: string }> {
+  const response = await fetchWithAuth(`/organizations/${orgId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ email, role }),
+  });
+  return response.json();
+}
+
+export async function removeOrgMemberApi(orgId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+  const response = await fetchWithAuth(`/organizations/${orgId}/members/${userId}`, {
+    method: 'DELETE',
+  });
+  return response.json();
+}
+
+// =============================================================================
+// Projects API
+// =============================================================================
+
+export async function getProjects(orgId: string): Promise<{ success: boolean; data: Project[] }> {
+  const response = await fetchWithAuth(`/organizations/${orgId}/projects`);
+  return response.json();
+}
+
+export async function createProjectApi(orgId: string, data: {
+  name: string;
+  slug: string;
+  description?: string;
+}): Promise<{ success: boolean; data: Project; error?: string }> {
+  const response = await fetchWithAuth(`/organizations/${orgId}/projects`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return response.json();
+}
+
+export async function deleteProjectApi(orgId: string, projectId: string): Promise<{ success: boolean; error?: string }> {
+  const response = await fetchWithAuth(`/organizations/${orgId}/projects/${projectId}`, {
+    method: 'DELETE',
+  });
   return response.json();
 }

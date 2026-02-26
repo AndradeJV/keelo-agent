@@ -24,6 +24,7 @@ import {
 import { notifyRequirementsAnalysisComplete } from '../integrations/slack/index.js';
 import historyRoutes from './routes/history.js';
 import authRoutes from './routes/auth.js';
+import organizationsRoutes from './routes/organizations.js';
 import qaHealthRoutes from './routes/qa-health.js';
 import settingsRoutes from './routes/settings.js';
 import productImpactRoutes from './routes/product-impact.js';
@@ -104,6 +105,7 @@ app.use('/auth', authRoutes);
 // =============================================================================
 
 app.use('/history', requireAuth, historyRoutes);
+app.use('/organizations', requireAuth, organizationsRoutes);
 app.use('/qa-health', requireAuth, qaHealthRoutes);
 app.use('/settings', requireAuth, settingsRoutes);
 app.use('/product-impact', requireAuth, productImpactRoutes);
@@ -231,6 +233,8 @@ app.post('/analyze/requirements', requireAuth, async (req, res) => {
       metadata,
       format = 'json',
       async: asyncMode = true, // Default to async mode
+      projectId,
+      organizationId,
     } = req.body;
 
     logger.info({
@@ -288,7 +292,9 @@ app.post('/analyze/requirements', requireAuth, async (req, res) => {
           sprint: metadata?.sprint,
         },
         { figmaUrl, requirements, hasPdf: !!pdfBase64 },
-        req.user?.id
+        req.user?.id,
+        projectId,
+        organizationId
       );
 
       // Emit WebSocket event - analysis queued
@@ -344,7 +350,9 @@ app.post('/analyze/requirements', requireAuth, async (req, res) => {
             sprint: metadata?.sprint,
           },
           result,
-          req.user?.id
+          req.user?.id,
+          projectId,
+          organizationId
         );
       } catch (error) {
         logger.error({ error }, 'Failed to save analysis to database');
@@ -507,7 +515,7 @@ async function processRequirementsAsync(
  */
 app.post('/analyze/figma', requireAuth, async (req, res) => {
   try {
-    const { figmaUrl, figmaImage, context, metadata } = req.body;
+    const { figmaUrl, figmaImage, context, metadata, projectId, organizationId } = req.body;
 
     if (!figmaUrl && !figmaImage) {
       return res.status(400).json({ 
@@ -535,7 +543,9 @@ app.post('/analyze/figma', requireAuth, async (req, res) => {
             sprint: metadata?.sprint,
           },
           result,
-          req.user?.id
+          req.user?.id,
+          projectId,
+          organizationId
         );
       } catch (error) {
         logger.error({ error }, 'Failed to save analysis to database');
@@ -568,7 +578,7 @@ app.post('/analyze/figma', requireAuth, async (req, res) => {
  */
 app.post('/analyze/user-story', requireAuth, async (req, res) => {
   try {
-    const { story, acceptanceCriteria, context, metadata } = req.body;
+    const { story, acceptanceCriteria, context, metadata, projectId, organizationId } = req.body;
 
     if (!story) {
       return res.status(400).json({ 
@@ -605,7 +615,9 @@ app.post('/analyze/user-story', requireAuth, async (req, res) => {
             sprint: metadata?.sprint,
           },
           result,
-          req.user?.id
+          req.user?.id,
+          projectId,
+          organizationId
         );
       } catch (error) {
         logger.error({ error }, 'Failed to save analysis to database');

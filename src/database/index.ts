@@ -81,6 +81,36 @@ export {
 } from './repositories/user-repository.js';
 
 export {
+  createOrganization,
+  getOrganizationById,
+  getOrganizationBySlug,
+  getUserOrganizations,
+  updateOrganization,
+  deleteOrganization,
+  getOrgMembership,
+  getOrgMembers,
+  addOrgMember,
+  removeOrgMember,
+  userHasOrgAccess,
+  type OrganizationRecord,
+  type OrgMemberRecord,
+  type OrganizationWithRole,
+} from './repositories/organization-repository.js';
+
+export {
+  createProject,
+  getProjectById,
+  getOrgProjects,
+  getProjectBySlug,
+  updateProject,
+  deleteProject,
+  userHasProjectAccess,
+  getUserProjects,
+  type ProjectRecord,
+  type ProjectWithStats,
+} from './repositories/project-repository.js';
+
+export {
   classifyBugOrigin,
   upsertJiraBugEvents,
   getWeeklyJiraBugStats,

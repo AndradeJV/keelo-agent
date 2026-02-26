@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   AlertTriangle,
   CheckCircle,
@@ -14,16 +14,13 @@ import {
   ExternalLink,
   Flame,
   MapPin,
-  Settings,
-  Plus,
-  Trash2,
-  X,
-  Folder,
+  Building2,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { getStats, getAnalyses, getHealth, getHotspots, getRepositories, createRepositoryApi, deleteRepositoryApi, type Analysis, type Stats, type RiskHotspot, type Repository } from '../stores/api';
+import { getStats, getAnalyses, getHealth, getHotspots, type Analysis, type Stats, type RiskHotspot } from '../stores/api';
 import { useRealtimeStore } from '../stores/realtime';
+import { useWorkspaceStore } from '../stores/workspace';
 import RiskBadge from '../components/RiskBadge';
 import StatCard from '../components/StatCard';
 
@@ -31,47 +28,28 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentAnalyses, setRecentAnalyses] = useState<Analysis[]>([]);
   const [hotspots, setHotspots] = useState<RiskHotspot[]>([]);
-  const [repositories, setRepositories] = useState<Repository[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string>(() => {
-    return localStorage.getItem('keelo_selected_project') || '';
-  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dbEnabled, setDbEnabled] = useState<boolean | null>(null);
   
-  // Project management modal state
-  const [showProjectModal, setShowProjectModal] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
-  const [projectActionLoading, setProjectActionLoading] = useState(false);
-  const [projectError, setProjectError] = useState<string | null>(null);
-  
   const { connect, isConnected, analyses: realtimeAnalyses } = useRealtimeStore();
+  const { currentOrg, currentProject } = useWorkspaceStore();
 
   useEffect(() => {
     connect();
     loadInitialData();
   }, []);
 
-  // Reload data when project changes
+  // Reload data when org/project changes
   useEffect(() => {
     if (dbEnabled) {
       loadProjectData();
     }
-  }, [selectedProject, dbEnabled]);
+  }, [currentOrg?.id, currentProject?.id, dbEnabled]);
 
-  // Persist project selection
-  useEffect(() => {
-    if (selectedProject) {
-      localStorage.setItem('keelo_selected_project', selectedProject);
-    } else {
-      localStorage.removeItem('keelo_selected_project');
-    }
-  }, [selectedProject]);
-
-  // Merge realtime analyses with database analyses (filtered by project if selected)
+  // Merge realtime analyses with database analyses
   const allAnalyses = [...realtimeAnalyses, ...recentAnalyses]
     .filter((a, i, arr) => arr.findIndex(x => x.id === a.id) === i)
-    .filter(a => !selectedProject || a.repository === selectedProject)
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 10);
 
@@ -81,11 +59,6 @@ export default function Dashboard() {
       setDbEnabled(health.database?.enabled ?? false);
 
       if (health.database?.enabled) {
-        // Load repositories list
-        const reposRes = await getRepositories();
-        setRepositories(reposRes.data || []);
-        
-        // Load data for current project
         await loadProjectData();
       }
     } catch (err) {
@@ -98,79 +71,23 @@ export default function Dashboard() {
 
   async function loadProjectData() {
     try {
-      const filter = selectedProject ? { repository: selectedProject, limit: 5 } : { limit: 5 };
+      const filter: Record<string, string | number> = { limit: 5 };
+      if (currentProject?.id) {
+        filter.projectId = currentProject.id;
+      } else if (currentOrg?.id) {
+        filter.organizationId = currentOrg.id;
+      }
       
       const [statsRes, analysesRes, hotspotsRes] = await Promise.all([
-        getStats(), // TODO: Add project filter to stats endpoint
+        getStats(),
         getAnalyses(filter),
-        getHotspots({ repository: selectedProject, limit: 5 }).catch(() => ({ data: [] })),
+        getHotspots({ limit: 5 }).catch(() => ({ data: [] })),
       ]);
       setStats(statsRes.data);
       setRecentAnalyses(analysesRes.data);
       setHotspots(hotspotsRes.data || []);
     } catch (err) {
       console.error('Failed to load project data:', err);
-    }
-  }
-
-  function handleProjectChange(project: string) {
-    setSelectedProject(project);
-  }
-
-  async function handleAddProject() {
-    if (!newProjectName.trim()) {
-      setProjectError('Digite o nome do projeto');
-      return;
-    }
-    if (!newProjectName.includes('/')) {
-      setProjectError('Use o formato: owner/repo (ex: minha-org/meu-projeto)');
-      return;
-    }
-    
-    setProjectActionLoading(true);
-    setProjectError(null);
-    
-    try {
-      const result = await createRepositoryApi(newProjectName.trim());
-      if (result.success) {
-        setNewProjectName('');
-        const reposRes = await getRepositories();
-        setRepositories(reposRes.data || []);
-      } else {
-        setProjectError(result.error || 'Erro ao adicionar projeto');
-      }
-    } catch (err) {
-      setProjectError('Erro de conexão');
-    } finally {
-      setProjectActionLoading(false);
-    }
-  }
-
-  async function handleDeleteProject(repoId: string, repoName: string) {
-    if (!confirm(`Tem certeza que deseja excluir "${repoName}" e todas as suas análises?`)) {
-      return;
-    }
-    
-    setProjectActionLoading(true);
-    setProjectError(null);
-    
-    try {
-      const result = await deleteRepositoryApi(repoId);
-      if (result.success) {
-        const reposRes = await getRepositories();
-        setRepositories(reposRes.data || []);
-        
-        // If the deleted project was selected, clear selection
-        if (selectedProject === repoName) {
-          setSelectedProject('');
-        }
-      } else {
-        setProjectError(result.error || 'Erro ao excluir projeto');
-      }
-    } catch (err) {
-      setProjectError('Erro de conexão');
-    } finally {
-      setProjectActionLoading(false);
     }
   }
 
@@ -188,34 +105,19 @@ export default function Dashboard() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-dark-100">Dashboard</h1>
-          <p className="text-dark-400 mt-1">Visão geral das análises de QA</p>
+          <p className="text-dark-400 mt-1">
+            {currentOrg ? (
+              <span className="flex items-center gap-1.5">
+                <Building2 size={14} />
+                {currentOrg.name}
+                {currentProject && <span> / {currentProject.name}</span>}
+              </span>
+            ) : (
+              'Visão geral das análises de QA'
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-4 flex-wrap">
-          {/* Project Selector */}
-          {dbEnabled && (
-            <div className="flex items-center gap-2">
-              <select
-                value={selectedProject}
-                onChange={(e) => handleProjectChange(e.target.value)}
-                className="bg-dark-800 border border-dark-700 rounded-lg px-3 py-2 text-sm text-dark-100 focus:outline-none focus:ring-2 focus:ring-keelo-500 focus:border-transparent min-w-[200px]"
-              >
-                <option value="">Todos os projetos</option>
-                {repositories.map((repo) => (
-                  <option key={repo.id} value={repo.full_name}>
-                    📁 {repo.full_name} ({repo.analysis_count})
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => setShowProjectModal(true)}
-                className="p-2 bg-dark-800 border border-dark-700 rounded-lg text-dark-300 hover:text-keelo-400 hover:border-keelo-500/50 transition-colors"
-                title="Gerenciar Projetos"
-              >
-                <Settings size={18} />
-              </button>
-            </div>
-          )}
-
           {/* Database Status */}
           <div className="flex items-center gap-2">
             <Database size={16} className={dbEnabled ? 'text-keelo-500' : 'text-dark-500'} />
@@ -461,130 +363,27 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Project Management Modal */}
-      <AnimatePresence>
-        {showProjectModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
-            onClick={() => setShowProjectModal(false)}
+      {/* No Org CTA */}
+      {dbEnabled && !currentOrg && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-6 bg-keelo-500/10 border border-keelo-500/30 rounded-lg text-center"
+        >
+          <Building2 className="w-12 h-12 text-keelo-400 mx-auto mb-3" />
+          <h3 className="text-lg font-semibold text-dark-100 mb-1">Crie sua organização</h3>
+          <p className="text-dark-400 text-sm mb-4">
+            Para começar, crie uma organização e adicione seus projetos.
+          </p>
+          <Link
+            to="/settings"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-keelo-500 text-white rounded-lg font-medium hover:bg-keelo-600 transition-colors"
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-dark-900 border border-dark-700 rounded-xl p-6 w-full max-w-lg mx-4 max-h-[80vh] overflow-hidden flex flex-col"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-keelo-500/20 flex items-center justify-center">
-                    <Folder className="w-5 h-5 text-keelo-400" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-semibold text-dark-100">Gerenciar Projetos</h2>
-                    <p className="text-sm text-dark-400">Adicione ou remova projetos</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowProjectModal(false)}
-                  className="p-2 text-dark-400 hover:text-dark-100 hover:bg-dark-800 rounded-lg transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              {/* Add Project Form */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-dark-300 mb-2">
-                  Adicionar Novo Projeto
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddProject()}
-                    placeholder="owner/repo (ex: minha-org/meu-projeto)"
-                    className="flex-1 bg-dark-800 border border-dark-700 rounded-lg px-4 py-2 text-dark-100 placeholder-dark-500 focus:outline-none focus:ring-2 focus:ring-keelo-500 focus:border-transparent"
-                    disabled={projectActionLoading}
-                  />
-                  <button
-                    onClick={handleAddProject}
-                    disabled={projectActionLoading || !newProjectName.trim()}
-                    className="px-4 py-2 bg-keelo-500 text-white rounded-lg font-medium hover:bg-keelo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                  >
-                    {projectActionLoading ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <Plus size={18} />
-                    )}
-                    Adicionar
-                  </button>
-                </div>
-                {projectError && (
-                  <p className="mt-2 text-sm text-red-400">{projectError}</p>
-                )}
-              </div>
-
-              {/* Project List */}
-              <div className="flex-1 overflow-y-auto">
-                <p className="text-sm font-medium text-dark-300 mb-3">
-                  Projetos ({repositories.length})
-                </p>
-                {repositories.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Folder className="w-12 h-12 text-dark-600 mx-auto mb-3" />
-                    <p className="text-dark-400">Nenhum projeto cadastrado</p>
-                    <p className="text-sm text-dark-500 mt-1">
-                      Adicione projetos manualmente ou eles serão criados automaticamente ao analisar PRs
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {repositories.map((repo) => (
-                      <div
-                        key={repo.id}
-                        className="flex items-center justify-between p-3 bg-dark-800/50 rounded-lg group hover:bg-dark-800 transition-colors"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <Folder className="w-5 h-5 text-keelo-400 flex-shrink-0" />
-                          <div className="min-w-0">
-                            <p className="font-medium text-dark-200 truncate">
-                              {repo.full_name}
-                            </p>
-                            <p className="text-xs text-dark-400">
-                              {repo.analysis_count} análise{repo.analysis_count !== 1 ? 's' : ''}
-                              {repo.last_analysis_at && ` · Última: ${formatDistanceToNow(new Date(repo.last_analysis_at), { addSuffix: true, locale: ptBR })}`}
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleDeleteProject(repo.id, repo.full_name)}
-                          disabled={projectActionLoading}
-                          className="p-2 text-dark-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
-                          title="Excluir projeto"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className="mt-6 pt-4 border-t border-dark-700">
-                <p className="text-xs text-dark-500 text-center">
-                  ⚠️ Excluir um projeto remove todas as suas análises e hotspots
-                </p>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <Building2 size={18} />
+            Ir para Configurações
+          </Link>
+        </motion.div>
+      )}
     </div>
   );
 }

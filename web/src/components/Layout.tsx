@@ -11,10 +11,14 @@ import {
   LogOut,
   Menu,
   X,
+  Building2,
+  FolderKanban,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import NotificationsDropdown from './NotificationsDropdown';
+import { useWorkspaceStore } from '../stores/workspace';
+import { getOrganizations, getProjects } from '../stores/api';
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -30,6 +34,65 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  const {
+    currentOrg,
+    currentProject,
+    organizations,
+    projects,
+    setCurrentOrg,
+    setCurrentProject,
+    setOrganizations,
+    setProjects,
+  } = useWorkspaceStore();
+
+  // Load organizations on mount
+  useEffect(() => {
+    loadOrganizations();
+  }, []);
+
+  // Load projects when org changes
+  useEffect(() => {
+    if (currentOrg) {
+      loadProjects(currentOrg.id);
+    }
+  }, [currentOrg?.id]);
+
+  async function loadOrganizations() {
+    try {
+      const res = await getOrganizations();
+      if (res.success) {
+        setOrganizations(res.data);
+        // Auto-select first org if none selected
+        if (!currentOrg && res.data.length > 0) {
+          setCurrentOrg(res.data[0]);
+        }
+      }
+    } catch {
+      // Silent fail - will show empty state
+    }
+  }
+
+  async function loadProjects(orgId: string) {
+    try {
+      const res = await getProjects(orgId);
+      if (res.success) {
+        setProjects(res.data);
+      }
+    } catch {
+      setProjects([]);
+    }
+  }
+
+  function handleOrgChange(orgId: string) {
+    const org = organizations.find((o) => o.id === orgId) || null;
+    setCurrentOrg(org);
+  }
+
+  function handleProjectChange(projectId: string) {
+    const project = projects.find((p) => p.id === projectId) || null;
+    setCurrentProject(project);
+  }
 
   return (
     <div className="min-h-screen bg-dark-950 flex">
@@ -133,6 +196,47 @@ export default function Layout() {
           >
             <Menu size={24} />
           </button>
+
+          {/* Workspace Selector */}
+          <div className="flex items-center gap-3 ml-2">
+            {/* Organization Selector */}
+            {organizations.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Building2 size={16} className="text-dark-400" />
+                <select
+                  value={currentOrg?.id || ''}
+                  onChange={(e) => handleOrgChange(e.target.value)}
+                  className="bg-dark-800 border border-dark-700 rounded-lg px-3 py-1.5 text-sm text-dark-100 focus:outline-none focus:ring-2 focus:ring-keelo-500 focus:border-transparent max-w-[180px]"
+                >
+                  {organizations.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Project Selector */}
+            {currentOrg && projects.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-dark-600">/</span>
+                <FolderKanban size={16} className="text-dark-400" />
+                <select
+                  value={currentProject?.id || ''}
+                  onChange={(e) => handleProjectChange(e.target.value)}
+                  className="bg-dark-800 border border-dark-700 rounded-lg px-3 py-1.5 text-sm text-dark-100 focus:outline-none focus:ring-2 focus:ring-keelo-500 focus:border-transparent max-w-[180px]"
+                >
+                  <option value="">Todos os projetos</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name} ({project.analysis_count})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
 
           <div className="flex-1" />
 

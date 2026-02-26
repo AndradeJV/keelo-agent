@@ -45,6 +45,10 @@ export interface AnalysisRecord {
   created_at: Date;
   completed_at?: Date;
   error_message?: string;
+  // Multi-tenancy fields
+  user_id?: string;
+  project_id?: string;
+  organization_id?: string;
 }
 
 export interface RepositoryRecord {
@@ -70,6 +74,8 @@ export interface AnalysisFilter {
   offset?: number;
   userId?: string;
   isAdmin?: boolean;
+  projectId?: string;
+  organizationId?: string;
 }
 
 // =============================================================================
@@ -123,7 +129,7 @@ export interface RepositoryWithStats {
 /**
  * Get all repositories with analysis counts
  */
-export async function getRepositories(userId?: string, isAdmin = false): Promise<RepositoryWithStats[]> {
+export async function getRepositories(userId?: string, isAdmin = false, organizationId?: string): Promise<RepositoryWithStats[]> {
   if (!isDatabaseEnabled()) {
     return [];
   }
@@ -131,7 +137,10 @@ export async function getRepositories(userId?: string, isAdmin = false): Promise
   const params: unknown[] = [];
   let userFilter = '';
 
-  if (userId && !isAdmin) {
+  if (organizationId) {
+    params.push(organizationId);
+    userFilter = `WHERE r.organization_id = $1`;
+  } else if (userId && !isAdmin) {
     params.push(userId);
     userFilter = `WHERE r.user_id = $1`;
   }
@@ -369,7 +378,9 @@ export async function createRequirementsAnalysis(
     sprint?: string;
   },
   analysis: RequirementsAnalysisResult,
-  userId?: string
+  userId?: string,
+  projectId?: string,
+  organizationId?: string
 ): Promise<string> {
   if (!isDatabaseEnabled()) {
     logger.debug('Database not enabled, skipping analysis save');
@@ -384,13 +395,13 @@ export async function createRequirementsAnalysis(
         project_name, feature_name, sprint,
         overall_risk, summary_title, summary_description, complexity,
         scenarios_count, risks_count, gaps_count, criteria_count,
-        result_data, user_id, completed_at
+        result_data, user_id, project_id, organization_id, completed_at
       ) VALUES (
         'requirements', 'completed', $1,
         $2, $3, $4,
         $5, $6, $7, $8,
         $9, $10, $11, $12,
-        $13, $14, NOW()
+        $13, $14, $15, $16, NOW()
       ) RETURNING id`,
       [
         analysis.version || '1.0.0',
@@ -407,6 +418,8 @@ export async function createRequirementsAnalysis(
         analysis.acceptanceCriteria?.length || 0,
         JSON.stringify(analysis),
         userId || null,
+        projectId || null,
+        organizationId || null,
       ]
     );
 
@@ -505,8 +518,14 @@ export async function getAnalyses(filter: AnalysisFilter = {}): Promise<Analysis
   const params: unknown[] = [];
   let paramIndex = 1;
 
-  // Multi-tenancy: filter by user_id (admin sees all)
-  if (filter.userId && !filter.isAdmin) {
+  // Multi-tenancy: filter by organization/project (preferred) or user_id (legacy)
+  if (filter.projectId) {
+    conditions.push(`project_id = $${paramIndex++}`);
+    params.push(filter.projectId);
+  } else if (filter.organizationId) {
+    conditions.push(`organization_id = $${paramIndex++}`);
+    params.push(filter.organizationId);
+  } else if (filter.userId && !filter.isAdmin) {
     conditions.push(`user_id = $${paramIndex++}`);
     params.push(filter.userId);
   }
@@ -648,7 +667,7 @@ export async function getPRAnalysisHistory(
   );
 }
 
-export async function getStatistics(userId?: string, isAdmin = false): Promise<{
+export async function getStatistics(userId?: string, isAdmin = false, projectId?: string, organizationId?: string): Promise<{
   totalAnalyses: number;
   prAnalyses: number;
   requirementsAnalyses: number;
@@ -677,8 +696,19 @@ export async function getStatistics(userId?: string, isAdmin = false): Promise<{
     };
   }
 
-  const userFilter = (userId && !isAdmin) ? `WHERE user_id = $1` : '';
-  const params = (userId && !isAdmin) ? [userId] : undefined;
+  // Build filter: project > organization > user
+  let userFilter = '';
+  let params: unknown[] | undefined;
+  if (projectId) {
+    userFilter = 'WHERE project_id = $1';
+    params = [projectId];
+  } else if (organizationId) {
+    userFilter = 'WHERE organization_id = $1';
+    params = [organizationId];
+  } else if (userId && !isAdmin) {
+    userFilter = 'WHERE user_id = $1';
+    params = [userId];
+  }
 
   const result = await queryOne<{
     total_analyses: string;
@@ -790,7 +820,9 @@ export async function createPendingRequirementsAnalysis(
     sprint?: string;
   },
   inputData?: Record<string, unknown>,
-  userId?: string
+  userId?: string,
+  projectId?: string,
+  organizationId?: string
 ): Promise<string> {
   if (!isDatabaseEnabled()) {
     throw new Error('Database required for async analysis');
@@ -800,12 +832,12 @@ export async function createPendingRequirementsAnalysis(
     `INSERT INTO analyses (
       type, status, version,
       project_name, feature_name, sprint,
-      input_data, user_id,
+      input_data, user_id, project_id, organization_id,
       scenarios_count, risks_count, gaps_count, criteria_count
     ) VALUES (
       'requirements', 'pending', '1.0.0',
       $1, $2, $3,
-      $4, $5,
+      $4, $5, $6, $7,
       0, 0, 0, 0
     ) RETURNING id`,
     [
@@ -814,6 +846,8 @@ export async function createPendingRequirementsAnalysis(
       input.sprint,
       inputData ? JSON.stringify(inputData) : null,
       userId || null,
+      projectId || null,
+      organizationId || null,
     ]
   );
 

@@ -76,6 +76,7 @@ services:
       - ./database/migrations/004_add_trigger_source.sql:/docker-entrypoint-initdb.d/05_004.sql:ro
       - ./database/migrations/005_add_jira_metrics_and_reports.sql:/docker-entrypoint-initdb.d/06_005.sql:ro
       - ./database/migrations/006_add_users_and_auth.sql:/docker-entrypoint-initdb.d/07_006.sql:ro
+      - ./database/migrations/007_add_organizations_and_projects.sql:/docker-entrypoint-initdb.d/08_007.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keelo -d keelo"]
       interval: 5s

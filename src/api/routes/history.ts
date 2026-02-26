@@ -54,6 +54,8 @@ router.get('/', requireDatabase, async (req: Request, res: Response) => {
       offset: parseInt(req.query.offset as string, 10) || 0,
       userId: req.user?.id,
       isAdmin: req.user?.role === 'admin',
+      projectId: req.query.projectId as string,
+      organizationId: req.query.organizationId as string,
     };
 
     if (req.query.from) {
@@ -90,7 +92,12 @@ router.get('/', requireDatabase, async (req: Request, res: Response) => {
  */
 router.get('/stats', requireDatabase, async (req: Request, res: Response) => {
   try {
-    const stats = await getStatistics(req.user?.id, req.user?.role === 'admin');
+    const stats = await getStatistics(
+      req.user?.id,
+      req.user?.role === 'admin',
+      req.query.projectId as string,
+      req.query.organizationId as string
+    );
 
     res.json({
       success: true,
