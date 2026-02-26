@@ -73,6 +73,14 @@ export {
 } from './repositories/settings-repository.js';
 
 export {
+  findUserByGoogleId,
+  findUserByEmail,
+  findUserById,
+  upsertUser,
+  type UserRecord,
+} from './repositories/user-repository.js';
+
+export {
   classifyBugOrigin,
   upsertJiraBugEvents,
   getWeeklyJiraBugStats,

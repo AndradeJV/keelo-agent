@@ -1,7 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Shield, GitPullRequest, FileSearch, Zap } from 'lucide-react';
-import { useAuth, isOktaConfigured } from '../auth/AuthProvider';
+import { GitPullRequest, FileSearch, Zap } from 'lucide-react';
+import { useAuth, isGoogleConfigured } from '../auth/AuthProvider';
 
 export default function Login() {
   const { isAuthenticated, isLoading, login } = useAuth();
@@ -42,60 +42,45 @@ export default function Login() {
         </div>
 
         <div className="relative z-10 space-y-8">
-          <motion.div
-            className="flex items-start gap-4"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center flex-shrink-0">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-white/10 rounded-xl">
               <GitPullRequest className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-white text-lg">Análise de PRs</h3>
-              <p className="text-keelo-100">
+              <h3 className="text-white font-semibold">Revisão Inteligente de PRs</h3>
+              <p className="text-keelo-100 text-sm mt-1">
                 Análise automática de Pull Requests com IA para identificar riscos e gerar cenários de teste.
               </p>
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div
-            className="flex items-start gap-4"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center flex-shrink-0">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-white/10 rounded-xl">
               <FileSearch className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-white text-lg">Análise de Requisitos</h3>
-              <p className="text-keelo-100">
-                Gere cenários de teste antes do desenvolvimento com base em Figma, histórias de usuário e PDFs.
+              <h3 className="text-white font-semibold">Análise de Requisitos</h3>
+              <p className="text-keelo-100 text-sm mt-1">
+                Valide requisitos antes do código. Analise user stories, Figma e PDFs.
               </p>
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div
-            className="flex items-start gap-4"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.4 }}
-          >
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center flex-shrink-0">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-white/10 rounded-xl">
               <Zap className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-white text-lg">Execução Autônoma</h3>
-              <p className="text-keelo-100">
-                Gere testes automaticamente, abra PRs e monitore CI sem intervenção manual.
+              <h3 className="text-white font-semibold">Testes Automatizados</h3>
+              <p className="text-keelo-100 text-sm mt-1">
+                Geração automática de cenários e código de teste com base nas análises.
               </p>
             </div>
-          </motion.div>
+          </div>
         </div>
 
-        <div className="relative z-10 text-keelo-200 text-sm flex items-center gap-2">
-          <span>© 2024 Keelo by Trace Finance. Todos os direitos reservados.</span>
+        <div className="relative z-10 text-keelo-200 text-sm">
+          <span>Keelo v1.0 — Autonomous QA Agent</span>
         </div>
       </div>
 
@@ -122,7 +107,7 @@ export default function Login() {
 
           <div className="card">
             <div className="text-center mb-8">
-              <h1 className="text-2xl font-bold text-dark-100">Bem-vindo de volta</h1>
+              <h1 className="text-2xl font-bold text-dark-100">Bem-vindo ao Keelo</h1>
               <p className="text-dark-400 mt-2">Faça login para acessar o painel</p>
             </div>
 
@@ -130,15 +115,38 @@ export default function Login() {
               onClick={login}
               className="w-full btn-primary flex items-center justify-center gap-3 py-3"
             >
-              <Shield size={20} />
-              {isOktaConfigured() ? 'Entrar com Okta' : 'Entrar (Modo Demo)'}
+              {isGoogleConfigured() ? (
+                <>
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+                    />
+                    <path
+                      fill="currentColor"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="currentColor"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                    />
+                    <path
+                      fill="currentColor"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                    />
+                  </svg>
+                  Entrar com Google
+                </>
+              ) : (
+                'Entrar (Modo Demo)'
+              )}
             </button>
 
-            {!isOktaConfigured() && (
+            {!isGoogleConfigured() && (
               <div className="mt-4 p-4 bg-dark-800/50 rounded-lg border border-dark-700">
                 <p className="text-sm text-dark-400">
-                  <span className="text-yellow-500 font-medium">Modo Demo:</span> Okta não está configurado. 
-                  Configure as variáveis de ambiente para habilitar autenticação real.
+                  <span className="text-yellow-500 font-medium">Modo Demo:</span> Google OAuth não está configurado. 
+                  Configure <code className="text-yellow-400">VITE_GOOGLE_CLIENT_ID</code> para habilitar autenticação real.
                 </p>
               </div>
             )}
@@ -152,4 +160,3 @@ export default function Login() {
     </div>
   );
 }
-

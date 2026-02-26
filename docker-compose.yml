@@ -20,6 +20,10 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - CORS_ORIGIN=${CORS_ORIGIN:-*}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:-keelo-dev-secret-change-in-production}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
     volumes:
       - ./.keelo.json:/app/.keelo.json:ro
       - ./prompts:/app/prompts:ro
@@ -44,9 +48,7 @@ services:
       - "${WEB_PORT:-5173}:80"
     environment:
       - VITE_API_URL=http://keelo-api:3000
-      - VITE_OKTA_ISSUER=${OKTA_ISSUER}
-      - VITE_OKTA_CLIENT_ID=${OKTA_CLIENT_ID}
-      - VITE_OKTA_REDIRECT_URI=${OKTA_REDIRECT_URI}
+      - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     depends_on:
       - keelo-api
     restart: unless-stopped
@@ -73,6 +75,7 @@ services:
       - ./database/migrations/003_add_settings_table.sql:/docker-entrypoint-initdb.d/04_003.sql:ro
       - ./database/migrations/004_add_trigger_source.sql:/docker-entrypoint-initdb.d/05_004.sql:ro
       - ./database/migrations/005_add_jira_metrics_and_reports.sql:/docker-entrypoint-initdb.d/06_005.sql:ro
+      - ./database/migrations/006_add_users_and_auth.sql:/docker-entrypoint-initdb.d/07_006.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keelo -d keelo"]
       interval: 5s

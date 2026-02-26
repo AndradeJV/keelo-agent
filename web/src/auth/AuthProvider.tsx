@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { OktaAuth, AuthState } from '@okta/okta-auth-js';
-import { oktaConfig, isOktaConfigured } from './config';
+import { GoogleOAuthProvider, useGoogleLogin } from '@react-oauth/google';
+import { googleConfig, isGoogleConfigured } from './config';
 
 // =============================================================================
 // Types
@@ -11,16 +11,33 @@ interface User {
   email: string;
   name: string;
   avatar?: string;
+  role?: 'user' | 'admin';
 }
 
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   user: User | null;
-  login: () => Promise<void>;
-  logout: () => Promise<void>;
+  login: () => void;
+  logout: () => void;
   getAccessToken: () => Promise<string | null>;
 }
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const TOKEN_KEY = 'keelo_token';
+const USER_KEY = 'keelo_user';
+
+const DEMO_USER: User = {
+  id: 'demo-user',
+  email: 'demo@keelo.dev',
+  name: 'Demo User',
+  avatar: undefined,
+  role: 'admin',
+};
 
 // =============================================================================
 // Context
@@ -29,99 +46,82 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 // =============================================================================
-// Okta Client
+// Inner Provider (needs GoogleOAuthProvider above it)
 // =============================================================================
 
-let oktaAuth: OktaAuth | null = null;
-
-if (isOktaConfigured()) {
-  oktaAuth = new OktaAuth({
-    issuer: oktaConfig.issuer,
-    clientId: oktaConfig.clientId,
-    redirectUri: oktaConfig.redirectUri,
-    scopes: oktaConfig.scopes,
-    pkce: oktaConfig.pkce,
-  });
-}
-
-// =============================================================================
-// Demo User (quando Okta não está configurado)
-// =============================================================================
-
-const DEMO_USER: User = {
-  id: 'demo-user',
-  email: 'demo@keelo.dev',
-  name: 'Demo User',
-  avatar: undefined,
-};
-
-// =============================================================================
-// Provider Component
-// =============================================================================
-
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export function AuthProvider({ children }: AuthProviderProps) {
+function AuthProviderInner({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
 
-  // Check for existing session on mount
+  // Restore session from localStorage on mount
   useEffect(() => {
-    const initAuth = async () => {
-      if (!oktaAuth) {
-        // Demo mode - auto login
-        const savedAuth = localStorage.getItem('keelo_demo_auth');
-        if (savedAuth === 'true') {
-          setIsAuthenticated(true);
-          setUser(DEMO_USER);
-        }
-        setIsLoading(false);
-        return;
+    const token = localStorage.getItem(TOKEN_KEY);
+    const savedUser = localStorage.getItem(USER_KEY);
+
+    if (!isGoogleConfigured()) {
+      // Demo mode
+      const savedAuth = localStorage.getItem('keelo_demo_auth');
+      if (savedAuth === 'true') {
+        setIsAuthenticated(true);
+        setUser(DEMO_USER);
       }
+      setIsLoading(false);
+      return;
+    }
 
+    if (token && savedUser) {
       try {
-        // Handle callback
-        if (window.location.pathname === '/callback') {
-          await oktaAuth.handleLoginRedirect();
-          window.location.replace('/');
-          return;
+        const parsed = JSON.parse(savedUser) as User;
+        setUser(parsed);
+        setIsAuthenticated(true);
+      } catch {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+      }
+    }
+    setIsLoading(false);
+  }, []);
+
+  // Google login handler — gets access_token, exchanges for id_token via Google userinfo, then calls backend
+  const googleLogin = useGoogleLogin({
+    flow: 'auth-code',
+    onSuccess: async (codeResponse) => {
+      try {
+        setIsLoading(true);
+
+        // Send the authorization code to our backend to exchange for tokens
+        const res = await fetch(`${API_BASE}/auth/google`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: codeResponse.code }),
+        });
+
+        if (!res.ok) {
+          const error = await res.json().catch(() => ({ error: 'Auth failed' }));
+          throw new Error(error.error || `HTTP ${res.status}`);
         }
 
-        // Check existing session
-        const isAuth = await oktaAuth.isAuthenticated();
-        setIsAuthenticated(isAuth);
+        const data = await res.json();
 
-        if (isAuth) {
-          const userInfo = await oktaAuth.getUser();
-          setUser({
-            id: userInfo.sub || '',
-            email: userInfo.email || '',
-            name: userInfo.name || userInfo.email || '',
-            avatar: typeof userInfo.picture === 'string' ? userInfo.picture : undefined,
-          });
-        }
+        // Save token and user
+        localStorage.setItem(TOKEN_KEY, data.token);
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        setUser(data.user);
+        setIsAuthenticated(true);
       } catch (error) {
-        console.error('Auth initialization error:', error);
+        console.error('Google auth error:', error);
       } finally {
         setIsLoading(false);
       }
-    };
+    },
+    onError: (error) => {
+      console.error('Google login error:', error);
+    },
+  });
 
-    initAuth();
-
-    // Subscribe to auth state changes
-    if (oktaAuth) {
-      oktaAuth.authStateManager.subscribe((authState: AuthState) => {
-        setIsAuthenticated(authState.isAuthenticated || false);
-      });
-    }
-  }, []);
-
-  const login = useCallback(async () => {
-    if (!oktaAuth) {
+  const login = useCallback(() => {
+    if (!isGoogleConfigured()) {
       // Demo mode
       localStorage.setItem('keelo_demo_auth', 'true');
       setIsAuthenticated(true);
@@ -129,29 +129,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return;
     }
 
-    await oktaAuth.signInWithRedirect();
-  }, []);
+    googleLogin();
+  }, [googleLogin]);
 
-  const logout = useCallback(async () => {
-    if (!oktaAuth) {
-      // Demo mode
-      localStorage.removeItem('keelo_demo_auth');
-      setIsAuthenticated(false);
-      setUser(null);
-      return;
-    }
-
-    await oktaAuth.signOut();
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem('keelo_demo_auth');
+    setIsAuthenticated(false);
+    setUser(null);
   }, []);
 
   const getAccessToken = useCallback(async (): Promise<string | null> => {
-    if (!oktaAuth) {
+    if (!isGoogleConfigured()) {
       return 'demo-token';
     }
-
-    const tokenManager = oktaAuth.tokenManager;
-    const accessToken = await tokenManager.get('accessToken');
-    return accessToken ? (accessToken as { accessToken: string }).accessToken : null;
+    return localStorage.getItem(TOKEN_KEY);
   }, []);
 
   const value: AuthContextType = {
@@ -167,6 +160,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
 }
 
 // =============================================================================
+// Exported Provider (wraps with GoogleOAuthProvider)
+// =============================================================================
+
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export function AuthProvider({ children }: AuthProviderProps) {
+  if (!isGoogleConfigured()) {
+    // No Google config — render without OAuth provider (demo mode)
+    return <AuthProviderInner>{children}</AuthProviderInner>;
+  }
+
+  return (
+    <GoogleOAuthProvider clientId={googleConfig.clientId}>
+      <AuthProviderInner>{children}</AuthProviderInner>
+    </GoogleOAuthProvider>
+  );
+}
+
+// =============================================================================
 // Hook
 // =============================================================================
 
@@ -178,5 +192,5 @@ export function useAuth(): AuthContextType {
   return context;
 }
 
-export { isOktaConfigured };
-
+// Re-export for backwards compatibility
+export { isGoogleConfigured };

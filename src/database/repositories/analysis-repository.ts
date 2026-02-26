@@ -68,6 +68,8 @@ export interface AnalysisFilter {
   toDate?: Date;
   limit?: number;
   offset?: number;
+  userId?: string;
+  isAdmin?: boolean;
 }
 
 // =============================================================================
@@ -121,9 +123,17 @@ export interface RepositoryWithStats {
 /**
  * Get all repositories with analysis counts
  */
-export async function getRepositories(): Promise<RepositoryWithStats[]> {
+export async function getRepositories(userId?: string, isAdmin = false): Promise<RepositoryWithStats[]> {
   if (!isDatabaseEnabled()) {
     return [];
+  }
+
+  const params: unknown[] = [];
+  let userFilter = '';
+
+  if (userId && !isAdmin) {
+    params.push(userId);
+    userFilter = `WHERE r.user_id = $1`;
   }
 
   const results = await queryAll<RepositoryWithStats>(
@@ -137,8 +147,10 @@ export async function getRepositories(): Promise<RepositoryWithStats[]> {
       MAX(a.created_at) as last_analysis_at
     FROM repositories r
     LEFT JOIN analyses a ON a.repository_id = r.id
+    ${userFilter}
     GROUP BY r.id, r.owner, r.name, r.full_name, r.installation_id
-    ORDER BY analysis_count DESC, r.full_name ASC`
+    ORDER BY analysis_count DESC, r.full_name ASC`,
+    params.length > 0 ? params : undefined
   );
 
   return results.map(r => ({
@@ -151,7 +163,8 @@ export async function getRepositories(): Promise<RepositoryWithStats[]> {
  * Create a repository manually
  */
 export async function createRepository(
-  fullName: string
+  fullName: string,
+  userId?: string
 ): Promise<RepositoryRecord | null> {
   if (!isDatabaseEnabled()) {
     return null;
@@ -162,21 +175,25 @@ export async function createRepository(
     throw new Error('Invalid repository format. Use: owner/name');
   }
 
-  // Check if already exists
-  const existing = await queryOne<RepositoryRecord>(
-    'SELECT * FROM repositories WHERE owner = $1 AND name = $2',
-    [owner, name]
-  );
+  // Check if already exists for this user
+  const existingParams: unknown[] = [owner, name];
+  let existingQuery = 'SELECT * FROM repositories WHERE owner = $1 AND name = $2';
+  if (userId) {
+    existingQuery += ' AND user_id = $3';
+    existingParams.push(userId);
+  }
+
+  const existing = await queryOne<RepositoryRecord>(existingQuery, existingParams);
 
   if (existing) {
     return existing;
   }
 
   const result = await queryOne<RepositoryRecord>(
-    `INSERT INTO repositories (owner, name) 
-     VALUES ($1, $2) 
+    `INSERT INTO repositories (owner, name, user_id) 
+     VALUES ($1, $2, $3) 
      RETURNING *`,
-    [owner, name]
+    [owner, name, userId || null]
   );
 
   return result;
@@ -185,17 +202,22 @@ export async function createRepository(
 /**
  * Delete a repository and all its associated data
  */
-export async function deleteRepository(id: string): Promise<boolean> {
+export async function deleteRepository(id: string, userId?: string, isAdmin = false): Promise<boolean> {
   if (!isDatabaseEnabled()) {
     return false;
   }
 
   // Delete the repository (CASCADE will handle related records)
-  const result = await query(
-    'DELETE FROM repositories WHERE id = $1',
-    [id]
-  );
+  // Non-admin users can only delete their own repositories
+  let sql = 'DELETE FROM repositories WHERE id = $1';
+  const params: unknown[] = [id];
 
+  if (userId && !isAdmin) {
+    sql += ' AND user_id = $2';
+    params.push(userId);
+  }
+
+  const result = await query(sql, params);
   return (result.rowCount ?? 0) > 0;
 }
 
@@ -346,7 +368,8 @@ export async function createRequirementsAnalysis(
     featureName?: string;
     sprint?: string;
   },
-  analysis: RequirementsAnalysisResult
+  analysis: RequirementsAnalysisResult,
+  userId?: string
 ): Promise<string> {
   if (!isDatabaseEnabled()) {
     logger.debug('Database not enabled, skipping analysis save');
@@ -361,13 +384,13 @@ export async function createRequirementsAnalysis(
         project_name, feature_name, sprint,
         overall_risk, summary_title, summary_description, complexity,
         scenarios_count, risks_count, gaps_count, criteria_count,
-        result_data, completed_at
+        result_data, user_id, completed_at
       ) VALUES (
         'requirements', 'completed', $1,
         $2, $3, $4,
         $5, $6, $7, $8,
         $9, $10, $11, $12,
-        $13, NOW()
+        $13, $14, NOW()
       ) RETURNING id`,
       [
         analysis.version || '1.0.0',
@@ -383,6 +406,7 @@ export async function createRequirementsAnalysis(
         analysis.gaps?.length || 0,
         analysis.acceptanceCriteria?.length || 0,
         JSON.stringify(analysis),
+        userId || null,
       ]
     );
 
@@ -480,6 +504,12 @@ export async function getAnalyses(filter: AnalysisFilter = {}): Promise<Analysis
   const conditions: string[] = [];
   const params: unknown[] = [];
   let paramIndex = 1;
+
+  // Multi-tenancy: filter by user_id (admin sees all)
+  if (filter.userId && !filter.isAdmin) {
+    conditions.push(`user_id = $${paramIndex++}`);
+    params.push(filter.userId);
+  }
 
   if (filter.type) {
     conditions.push(`type = $${paramIndex++}`);
@@ -618,7 +648,7 @@ export async function getPRAnalysisHistory(
   );
 }
 
-export async function getStatistics(): Promise<{
+export async function getStatistics(userId?: string, isAdmin = false): Promise<{
   totalAnalyses: number;
   prAnalyses: number;
   requirementsAnalyses: number;
@@ -647,6 +677,9 @@ export async function getStatistics(): Promise<{
     };
   }
 
+  const userFilter = (userId && !isAdmin) ? `WHERE user_id = $1` : '';
+  const params = (userId && !isAdmin) ? [userId] : undefined;
+
   const result = await queryOne<{
     total_analyses: string;
     pr_analyses: string;
@@ -659,7 +692,24 @@ export async function getStatistics(): Promise<{
     high_count: string;
     helpful_count: string;
     not_helpful_count: string;
-  }>('SELECT * FROM v_statistics');
+  }>(
+    userFilter
+      ? `SELECT
+          COUNT(*) as total_analyses,
+          COUNT(*) FILTER (WHERE type = 'pr') as pr_analyses,
+          COUNT(*) FILTER (WHERE type = 'requirements') as requirements_analyses,
+          COUNT(*) FILTER (WHERE status = 'completed') as completed,
+          COUNT(*) FILTER (WHERE status = 'failed') as failed,
+          COALESCE(AVG(scenarios_count), 0) as avg_scenarios,
+          COALESCE(AVG(risks_count), 0) as avg_risks,
+          COUNT(*) FILTER (WHERE overall_risk = 'critical') as critical_count,
+          COUNT(*) FILTER (WHERE overall_risk = 'high') as high_count,
+          COUNT(*) FILTER (WHERE was_helpful = true) as helpful_count,
+          COUNT(*) FILTER (WHERE was_helpful = false) as not_helpful_count
+        FROM analyses ${userFilter}`
+      : 'SELECT * FROM v_statistics',
+    params
+  );
 
   if (!result) {
     return {
@@ -739,7 +789,8 @@ export async function createPendingRequirementsAnalysis(
     featureName?: string;
     sprint?: string;
   },
-  inputData?: Record<string, unknown>
+  inputData?: Record<string, unknown>,
+  userId?: string
 ): Promise<string> {
   if (!isDatabaseEnabled()) {
     throw new Error('Database required for async analysis');
@@ -749,12 +800,12 @@ export async function createPendingRequirementsAnalysis(
     `INSERT INTO analyses (
       type, status, version,
       project_name, feature_name, sprint,
-      input_data,
+      input_data, user_id,
       scenarios_count, risks_count, gaps_count, criteria_count
     ) VALUES (
       'requirements', 'pending', '1.0.0',
       $1, $2, $3,
-      $4,
+      $4, $5,
       0, 0, 0, 0
     ) RETURNING id`,
     [
@@ -762,6 +813,7 @@ export async function createPendingRequirementsAnalysis(
       input.featureName,
       input.sprint,
       inputData ? JSON.stringify(inputData) : null,
+      userId || null,
     ]
   );
 

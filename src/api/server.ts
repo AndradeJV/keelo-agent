@@ -23,9 +23,11 @@ import {
 } from '../database/index.js';
 import { notifyRequirementsAnalysisComplete } from '../integrations/slack/index.js';
 import historyRoutes from './routes/history.js';
+import authRoutes from './routes/auth.js';
 import qaHealthRoutes from './routes/qa-health.js';
 import settingsRoutes from './routes/settings.js';
 import productImpactRoutes from './routes/product-impact.js';
+import { requireAuth, optionalAuth } from './middleware/auth.js';
 import type { WebhookPayload, IssueCommentPayload } from '../core/types.js';
 import { enforceHybridModeAtStartup, getPRTriggerDecision } from '../core/trigger-mode.js';
 import { startWeeklyReportScheduler } from '../core/weekly-report-scheduler.js';
@@ -92,13 +94,19 @@ app.get('/health', async (_req, res) => {
 });
 
 // =============================================================================
-// Routes - History (Database)
+// Routes - Auth (public - no token required)
 // =============================================================================
 
-app.use('/history', historyRoutes);
-app.use('/qa-health', qaHealthRoutes);
-app.use('/settings', settingsRoutes);
-app.use('/product-impact', productImpactRoutes);
+app.use('/auth', authRoutes);
+
+// =============================================================================
+// Routes - History (Database) — protected by auth
+// =============================================================================
+
+app.use('/history', requireAuth, historyRoutes);
+app.use('/qa-health', requireAuth, qaHealthRoutes);
+app.use('/settings', requireAuth, settingsRoutes);
+app.use('/product-impact', requireAuth, productImpactRoutes);
 
 // =============================================================================
 // Routes - GitHub Webhook (PR Analysis)
@@ -213,7 +221,7 @@ app.post('/webhook', async (req, res) => {
  * - metadata?: { projectName?, featureName?, sprint?, priority? }
  * - format?: 'json' | 'markdown' - Formato de resposta (default: json)
  */
-app.post('/analyze/requirements', async (req, res) => {
+app.post('/analyze/requirements', requireAuth, async (req, res) => {
   try {
     const { 
       figmaUrl, 
@@ -279,7 +287,8 @@ app.post('/analyze/requirements', async (req, res) => {
           featureName: metadata?.featureName,
           sprint: metadata?.sprint,
         },
-        { figmaUrl, requirements, hasPdf: !!pdfBase64 }
+        { figmaUrl, requirements, hasPdf: !!pdfBase64 },
+        req.user?.id
       );
 
       // Emit WebSocket event - analysis queued
@@ -334,7 +343,8 @@ app.post('/analyze/requirements', async (req, res) => {
             featureName: metadata?.featureName,
             sprint: metadata?.sprint,
           },
-          result
+          result,
+          req.user?.id
         );
       } catch (error) {
         logger.error({ error }, 'Failed to save analysis to database');
@@ -495,7 +505,7 @@ async function processRequirementsAsync(
  * 
  * Analisa apenas um design do Figma.
  */
-app.post('/analyze/figma', async (req, res) => {
+app.post('/analyze/figma', requireAuth, async (req, res) => {
   try {
     const { figmaUrl, figmaImage, context, metadata } = req.body;
 
@@ -524,7 +534,8 @@ app.post('/analyze/figma', async (req, res) => {
             featureName: metadata?.featureName || 'Figma Analysis',
             sprint: metadata?.sprint,
           },
-          result
+          result,
+          req.user?.id
         );
       } catch (error) {
         logger.error({ error }, 'Failed to save analysis to database');
@@ -555,7 +566,7 @@ app.post('/analyze/figma', async (req, res) => {
  * 
  * Analisa uma história de usuário e gera cenários de teste.
  */
-app.post('/analyze/user-story', async (req, res) => {
+app.post('/analyze/user-story', requireAuth, async (req, res) => {
   try {
     const { story, acceptanceCriteria, context, metadata } = req.body;
 
@@ -593,7 +604,8 @@ app.post('/analyze/user-story', async (req, res) => {
             featureName: metadata?.featureName || 'User Story Analysis',
             sprint: metadata?.sprint,
           },
-          result
+          result,
+          req.user?.id
         );
       } catch (error) {
         logger.error({ error }, 'Failed to save analysis to database');

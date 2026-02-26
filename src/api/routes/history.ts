@@ -52,6 +52,8 @@ router.get('/', requireDatabase, async (req: Request, res: Response) => {
       overallRisk: req.query.risk as AnalysisFilter['overallRisk'],
       limit: parseInt(req.query.limit as string, 10) || 50,
       offset: parseInt(req.query.offset as string, 10) || 0,
+      userId: req.user?.id,
+      isAdmin: req.user?.role === 'admin',
     };
 
     if (req.query.from) {
@@ -86,9 +88,9 @@ router.get('/', requireDatabase, async (req: Request, res: Response) => {
  * 
  * Retorna estatísticas gerais
  */
-router.get('/stats', requireDatabase, async (_req: Request, res: Response) => {
+router.get('/stats', requireDatabase, async (req: Request, res: Response) => {
   try {
-    const stats = await getStatistics();
+    const stats = await getStatistics(req.user?.id, req.user?.role === 'admin');
 
     res.json({
       success: true,
@@ -108,9 +110,9 @@ router.get('/stats', requireDatabase, async (_req: Request, res: Response) => {
  * 
  * Lista todos os repositórios/projetos com contagem de análises
  */
-router.get('/repositories', requireDatabase, async (_req: Request, res: Response) => {
+router.get('/repositories', requireDatabase, async (req: Request, res: Response) => {
   try {
-    const repositories = await getRepositories();
+    const repositories = await getRepositories(req.user?.id, req.user?.role === 'admin');
 
     res.json({
       success: true,
@@ -148,7 +150,7 @@ router.post('/repositories', requireDatabase, async (req: Request, res: Response
       });
     }
 
-    const repository = await createRepository(fullName);
+    const repository = await createRepository(fullName, req.user?.id);
 
     res.status(201).json({
       success: true,
@@ -181,7 +183,7 @@ router.delete('/repositories/:id', requireDatabase, async (req: Request, res: Re
       });
     }
 
-    const deleted = await deleteRepository(id);
+    const deleted = await deleteRepository(id, req.user?.id, req.user?.role === 'admin');
 
     if (deleted) {
       res.json({
