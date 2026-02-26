@@ -46,7 +46,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-dark-950 flex">
       {/* Left Side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-keelo-600 to-keelo-800 p-12 flex-col justify-between relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-keelo-600 via-keelo-700 to-keelo-900 p-12 flex-col justify-between relative overflow-hidden">
         {/* Background Pattern */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full -translate-x-1/2 -translate-y-1/2" />
@@ -56,14 +56,13 @@ export default function Login() {
         <div className="relative z-10">
           <div className="flex items-center gap-3">
             <img 
-              src="/trace-logo.jpeg" 
-              alt="Trace Finance" 
-              className="w-12 h-12 rounded-xl object-cover"
+              src="/keelo-logo.svg" 
+              alt="Keelo" 
+              className="w-12 h-12 rounded-xl"
             />
             <span className="text-3xl font-bold text-white">Keelo</span>
           </div>
           <p className="text-keelo-100 mt-2 text-lg">QA Intelligence Platform</p>
-          <p className="text-keelo-200 mt-1 text-sm">by Trace Finance</p>
         </div>
 
         <div className="relative z-10 space-y-8">
@@ -121,13 +120,13 @@ export default function Login() {
           <div className="lg:hidden flex flex-col items-center justify-center gap-2 mb-8">
             <div className="flex items-center gap-3">
               <img 
-                src="/trace-logo.jpeg" 
-                alt="Trace Finance" 
-                className="w-12 h-12 rounded-xl object-cover"
+                src="/keelo-logo.svg" 
+                alt="Keelo" 
+                className="w-12 h-12 rounded-xl"
               />
               <span className="text-3xl font-bold gradient-text">Keelo</span>
             </div>
-            <span className="text-sm text-dark-400">by Trace Finance</span>
+            <span className="text-sm text-dark-400">QA Intelligence Platform</span>
           </div>
 
           <div className="card">

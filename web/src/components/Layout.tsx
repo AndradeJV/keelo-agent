@@ -106,9 +106,9 @@ export default function Layout() {
         <div className="h-16 flex items-center justify-between px-6 border-b border-dark-800">
           <div className="flex items-center gap-3">
             <img 
-              src="/trace-logo.jpeg" 
-              alt="Trace Finance" 
-              className="w-8 h-8 rounded-lg object-cover"
+              src="/keelo-logo.svg" 
+              alt="Keelo" 
+              className="w-8 h-8 rounded-lg"
             />
             <span className="text-xl font-semibold gradient-text">Keelo</span>
           </div>
@@ -164,16 +164,15 @@ export default function Layout() {
           </div>
         </div>
 
-        {/* Footer - Powered by */}
+        {/* Footer */}
         <div className="p-4 border-t border-dark-800">
           <div className="flex items-center justify-center gap-2 text-xs text-dark-500">
-            <span>Powered by</span>
             <img 
-              src="/trace-logo.jpeg" 
-              alt="Trace Finance" 
-              className="w-4 h-4 rounded object-cover"
+              src="/keelo-icon.svg" 
+              alt="Keelo" 
+              className="w-4 h-4"
             />
-            <span className="text-dark-400">Trace Finance</span>
+            <span className="text-dark-400">Keelo v1.0</span>
           </div>
         </div>
       </aside>
