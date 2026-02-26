@@ -1,0 +1,39 @@
+{
+    "branches": [
+      "main"
+    ],
+    "ci": false,
+    "plugins": [
+      [
+        "@semantic-release/commit-analyzer",
+        {
+          "preset": "conventionalcommits"
+        }
+      ],
+      [
+        "@semantic-release/release-notes-generator",
+        {
+          "preset": "conventionalcommits"
+        }
+      ],
+      [
+        "@semantic-release/github",
+        {
+          "labels": false,
+          "releasedLabels": false,
+          "failTitle": false,
+          "successComment": false
+        }
+      ]
+    ],
+    "release": {
+      "analyzeCommits": {
+        "releaseRules": [
+          {
+            "type": "refactor",
+            "release": "patch"
+          }
+        ]
+      }
+    }
+  }

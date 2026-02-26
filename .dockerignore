@@ -1,0 +1,50 @@
+# Dependencies (installed in container)
+node_modules
+web/node_modules
+
+# Build output (built in container)
+dist
+web/dist
+
+# Git
+.git
+.gitignore
+
+# Environment files (use K8s secrets / env vars)
+.env
+.env.local
+.env.*.local
+web/.env
+web/.env.local
+
+# Keelo local data (runtime only)
+.keelo-data
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Cursor AI
+*.mdc
+.cursor
+
+# Test & Coverage
+coverage
+test-results
+playwright-report
+
+# Docker local volumes
+postgres-data
+
+# Web frontend (separate build)
+web

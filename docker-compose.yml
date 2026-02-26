@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Keelo API
+  # =============================================================================
+  keelo-api:
+    build: .
+    container_name: keelo-api
+    ports:
+      - "${API_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://keelo:keelo@postgres:5432/keelo
+      - GITHUB_APP_ID=${GITHUB_APP_ID}
+      - GITHUB_PRIVATE_KEY=${GITHUB_PRIVATE_KEY}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+    volumes:
+      - ./.keelo.json:/app/.keelo.json:ro
+      - ./prompts:/app/prompts:ro
+      - ./knowledges:/app/knowledges:ro
+      - keelo-data:/app/.keelo-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - keelo-network
+
+  # =============================================================================
+  # Keelo Web (Frontend)
+  # =============================================================================
+  keelo-web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: keelo-web
+    ports:
+      - "${WEB_PORT:-5173}:80"
+    environment:
+      - VITE_API_URL=http://keelo-api:3000
+      - VITE_OKTA_ISSUER=${OKTA_ISSUER}
+      - VITE_OKTA_CLIENT_ID=${OKTA_CLIENT_ID}
+      - VITE_OKTA_REDIRECT_URI=${OKTA_REDIRECT_URI}
+    depends_on:
+      - keelo-api
+    restart: unless-stopped
+    networks:
+      - keelo-network
+
+  # =============================================================================
+  # PostgreSQL Database
+  # =============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: keelo-postgres
+    environment:
+      POSTGRES_USER: keelo
+      POSTGRES_PASSWORD: keelo
+      POSTGRES_DB: keelo
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keelo -d keelo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - keelo-network
+
+  # =============================================================================
+  # Adminer (DB Admin UI) - Optional
+  # =============================================================================
+  adminer:
+    image: adminer:latest
+    container_name: keelo-adminer
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - keelo-network
+    profiles:
+      - admin
+
+volumes:
+  postgres-data:
+  keelo-data:
+
+networks:
+  keelo-network:
+    driver: bridge
+

@@ -1,0 +1,100 @@
+{
+  "language": "pt-br",
+  "trigger": "auto",
+  
+  "llm": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-20250514",
+    "temperature": 0.2,
+    "maxTokens": 16000
+  },
+  
+  "testFrameworks": {
+    "e2e": "playwright",
+    "unit": "vitest",
+    "api": "supertest"
+  },
+  
+  "actions": {
+    "autoCreateIssues": false,
+    "autoGenerateTests": true,
+    "autoCreateTasks": false,
+    "createDraftPRs": true,
+    "issueLabels": ["keelo", "qa"],
+    "autonomous": {
+      "enabled": false,
+      "createPR": true,
+      "monitorCI": true,
+      "autoFix": true,
+      "baseBranchStrategy": "default"
+    }
+  },
+  
+  "runtime": {
+    "enabled": false,
+    "schedule": "0 3 * * *",
+    "timezone": "America/Sao_Paulo",
+    "maxPages": 50,
+    "maxDepth": 3,
+    "environments": {
+      "staging": {
+        "url": "https://staging.your-app.com",
+        "mode": "destructive",
+        "auth": {
+          "enabled": false,
+          "loginUrl": "/login",
+          "username": "${STAGING_USER}",
+          "password": "${STAGING_PASS}"
+        }
+      },
+      "production": {
+        "url": "https://your-app.com",
+        "mode": "readonly"
+      }
+    },
+    "criticalFlows": [
+      {
+        "name": "Login Flow",
+        "description": "Testa o fluxo de login",
+        "environment": "staging",
+        "steps": [
+          { "action": "goto", "value": "/login" },
+          { "action": "fill", "selector": "#email", "value": "test@test.com" },
+          { "action": "fill", "selector": "#password", "value": "test123" },
+          { "action": "click", "selector": "button[type=submit]" },
+          { "action": "assert", "selector": ".dashboard" }
+        ]
+      }
+    ]
+  },
+  
+  "notifications": {
+    "slack": {
+      "enabled": false,
+      "webhookUrl": "${SLACK_WEBHOOK_URL}",
+      "channel": "#qa-alerts",
+      "notifyOn": {
+        "analysis": true,
+        "testPRCreated": true,
+        "ciFailure": true,
+        "criticalRisk": true
+      }
+    }
+  },
+  
+  "coverage": {
+    "enabled": true,
+    "minThreshold": 80,
+    "failOnDecrease": false,
+    "suggestTests": true
+  },
+  
+  "feedback": {
+    "enabled": true,
+    "collectReactions": true,
+    "useLearning": true,
+    "showStats": false
+  },
+  
+  "testOutputDir": "tests/generated"
+}
