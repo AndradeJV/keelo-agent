@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import { logger } from '../../config/index.js';
-import { upsertUser, isDatabaseEnabled } from '../../database/index.js';
+import { upsertUser, isDatabaseEnabled, findUserByUsername, verifyPassword } from '../../database/index.js';
 import { signToken, requireAuth } from '../middleware/auth.js';
 
 // =============================================================================
@@ -129,6 +129,65 @@ router.post('/google', async (req: Request, res: Response) => {
 
     res.status(401).json({
       error: 'Falha na autenticação com Google',
+      details: error instanceof Error ? error.message : 'Erro desconhecido',
+    });
+  }
+});
+
+/**
+ * POST /auth/login
+ * 
+ * Username/password login (for admin and internal accounts).
+ * Accepts { username: string, password: string }.
+ */
+router.post('/login', async (req: Request, res: Response) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Usuário e senha são obrigatórios' });
+    }
+
+    if (!isDatabaseEnabled()) {
+      return res.status(503).json({ error: 'Banco de dados não disponível' });
+    }
+
+    const user = await findUserByUsername(username);
+
+    if (!user) {
+      return res.status(401).json({ error: 'Usuário ou senha inválidos' });
+    }
+
+    const valid = await verifyPassword(user, password);
+
+    if (!valid) {
+      return res.status(401).json({ error: 'Usuário ou senha inválidos' });
+    }
+
+    // Generate JWT
+    const token = signToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    logger.info({ userId: user.id, username: user.username }, 'Admin login successful');
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatar: user.avatar,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    logger.error({ error }, 'Login failed');
+    res.status(500).json({
+      error: 'Falha no login',
       details: error instanceof Error ? error.message : 'Erro desconhecido',
     });
   }

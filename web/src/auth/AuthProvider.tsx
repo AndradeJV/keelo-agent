@@ -19,6 +19,7 @@ interface AuthContextType {
   isLoading: boolean;
   user: User | null;
   login: () => void;
+  loginWithCredentials: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   getAccessToken: () => Promise<string | null>;
 }
@@ -69,6 +70,12 @@ function DemoAuthProvider({ children }: { children: ReactNode }) {
     setUser(DEMO_USER);
   }, []);
 
+  const loginWithCredentials = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    // In demo mode, just do a normal demo login
+    login();
+    return { success: true };
+  }, [login]);
+
   const logout = useCallback(() => {
     localStorage.removeItem('keelo_demo_auth');
     setIsAuthenticated(false);
@@ -80,7 +87,7 @@ function DemoAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isLoading, user, login, logout, getAccessToken }}>
+    <AuthContext.Provider value={{ isAuthenticated, isLoading, user, login, loginWithCredentials, logout, getAccessToken }}>
       {children}
     </AuthContext.Provider>
   );
@@ -151,6 +158,35 @@ function GoogleAuthProviderInner({ children }: { children: ReactNode }) {
     googleLogin();
   }, [googleLogin]);
 
+  const loginWithCredentials = useCallback(async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      setIsLoading(true);
+
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        return { success: false, error: data.error || `HTTP ${res.status}` };
+      }
+
+      localStorage.setItem(TOKEN_KEY, data.token);
+      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      setUser(data.user);
+      setIsAuthenticated(true);
+      return { success: true };
+    } catch (error) {
+      console.error('Login error:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Erro de conexão' };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
@@ -163,7 +199,7 @@ function GoogleAuthProviderInner({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isLoading, user, login, logout, getAccessToken }}>
+    <AuthContext.Provider value={{ isAuthenticated, isLoading, user, login, loginWithCredentials, logout, getAccessToken }}>
       {children}
     </AuthContext.Provider>
   );

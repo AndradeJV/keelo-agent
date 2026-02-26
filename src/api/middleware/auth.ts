@@ -28,6 +28,15 @@ declare global {
 const JWT_SECRET = process.env.JWT_SECRET || 'keelo-dev-secret-change-in-production';
 const JWT_EXPIRY = '7d';
 
+/** True when JWT_SECRET is NOT explicitly set — local dev / demo mode */
+const IS_DEMO_MODE = !process.env.JWT_SECRET;
+
+const DEMO_USER: AuthUser = {
+  id: 'demo-user',
+  email: 'demo@keelo.dev',
+  role: 'admin',
+};
+
 export function signToken(payload: AuthUser): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 }
@@ -48,16 +57,31 @@ export function verifyToken(token: string): AuthUser | null {
 /**
  * Middleware that requires a valid JWT token.
  * Extracts user info and attaches to req.user.
+ * 
+ * In demo mode (JWT_SECRET not set), allows unauthenticated access
+ * with a demo admin user for local development.
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // Demo mode: allow unauthenticated access with admin privileges
+    if (IS_DEMO_MODE) {
+      req.user = DEMO_USER;
+      return next();
+    }
     res.status(401).json({ error: 'Token de autenticação não fornecido' });
     return;
   }
 
   const token = authHeader.substring(7);
+
+  // Demo mode: accept 'demo-token' as valid
+  if (IS_DEMO_MODE && token === 'demo-token') {
+    req.user = DEMO_USER;
+    return next();
+  }
+
   const user = verifyToken(token);
 
   if (!user) {
@@ -78,10 +102,19 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction): 
 
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
+
+    if (IS_DEMO_MODE && token === 'demo-token') {
+      req.user = DEMO_USER;
+      return next();
+    }
+
     const user = verifyToken(token);
     if (user) {
       req.user = user;
     }
+  } else if (IS_DEMO_MODE) {
+    // In demo mode, always attach demo user
+    req.user = DEMO_USER;
   }
 
   next();

@@ -1,5 +1,6 @@
 import { queryOne, isDatabaseEnabled } from '../connection.js';
 import { logger } from '../../config/index.js';
+import bcrypt from 'bcryptjs';
 
 // =============================================================================
 // Types
@@ -7,11 +8,13 @@ import { logger } from '../../config/index.js';
 
 export interface UserRecord {
   id: string;
-  google_id: string;
+  google_id: string | null;
   email: string;
   name: string | null;
   avatar: string | null;
   role: 'user' | 'admin';
+  username: string | null;
+  password_hash: string | null;
   created_at: Date;
   last_login_at: Date;
 }
@@ -94,5 +97,95 @@ export async function upsertUser(data: {
 
   logger.info({ userId: result.id, email: result.email, role: result.role }, 'User logged in');
   return result;
+}
+
+// =============================================================================
+// Username/Password Authentication
+// =============================================================================
+
+/**
+ * Find a user by username
+ */
+export async function findUserByUsername(username: string): Promise<UserRecord | null> {
+  if (!isDatabaseEnabled()) return null;
+
+  return queryOne<UserRecord>(
+    'SELECT * FROM users WHERE username = $1',
+    [username]
+  );
+}
+
+/**
+ * Verify a user's password
+ */
+export async function verifyPassword(user: UserRecord, password: string): Promise<boolean> {
+  if (!user.password_hash) return false;
+  return bcrypt.compare(password, user.password_hash);
+}
+
+/**
+ * Create a user with username and password (for admin accounts)
+ */
+export async function createUserWithPassword(data: {
+  username: string;
+  password: string;
+  email: string;
+  name?: string;
+  role?: 'user' | 'admin';
+}): Promise<UserRecord> {
+  if (!isDatabaseEnabled()) {
+    throw new Error('Database not enabled');
+  }
+
+  const passwordHash = await bcrypt.hash(data.password, 10);
+
+  const result = await queryOne<UserRecord>(
+    `INSERT INTO users (username, password_hash, email, name, role, last_login_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())
+     ON CONFLICT (username) DO UPDATE SET
+       password_hash = $2,
+       role = $5,
+       last_login_at = NOW()
+     RETURNING *`,
+    [data.username, passwordHash, data.email, data.name || data.username, data.role || 'user']
+  );
+
+  if (!result) {
+    throw new Error('Failed to create user');
+  }
+
+  logger.info({ userId: result.id, username: result.username, role: result.role }, 'User created with password');
+  return result;
+}
+
+/**
+ * Seed the admin user if it doesn't exist.
+ * Called at startup.
+ */
+export async function seedAdminUser(): Promise<void> {
+  if (!isDatabaseEnabled()) return;
+
+  const adminUsername = 'AdminKeelo';
+  const adminPassword = 'Admin@Keelo21377';
+
+  try {
+    const existing = await findUserByUsername(adminUsername);
+    if (existing) {
+      logger.debug({ username: adminUsername }, 'Admin user already exists');
+      return;
+    }
+
+    await createUserWithPassword({
+      username: adminUsername,
+      password: adminPassword,
+      email: 'admin@keelo.dev',
+      name: 'Admin Keelo',
+      role: 'admin',
+    });
+
+    logger.info({ username: adminUsername }, 'Admin user seeded successfully');
+  } catch (error) {
+    logger.error({ error }, 'Failed to seed admin user');
+  }
 }
 

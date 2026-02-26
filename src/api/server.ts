@@ -20,6 +20,7 @@ import {
   markAnalysisProcessing,
   completeRequirementsAnalysis,
   markAnalysisFailed,
+  seedAdminUser,
 } from '../database/index.js';
 import { notifyRequirementsAnalysisComplete } from '../integrations/slack/index.js';
 import historyRoutes from './routes/history.js';
@@ -719,6 +720,9 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 export async function startServer(): Promise<void> {
   // Initialize database
   initDatabase();
+  
+  // Seed admin user
+  await seedAdminUser();
   
   // Load configuration from database
   try {

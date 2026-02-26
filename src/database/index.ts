@@ -76,7 +76,11 @@ export {
   findUserByGoogleId,
   findUserByEmail,
   findUserById,
+  findUserByUsername,
+  verifyPassword,
+  createUserWithPassword,
   upsertUser,
+  seedAdminUser,
   type UserRecord,
 } from './repositories/user-repository.js';
 

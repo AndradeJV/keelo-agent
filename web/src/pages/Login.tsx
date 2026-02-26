@@ -1,10 +1,17 @@
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { GitPullRequest, FileSearch, Zap } from 'lucide-react';
+import { GitPullRequest, FileSearch, Zap, Eye, EyeOff, LogIn } from 'lucide-react';
 import { useAuth, isGoogleConfigured } from '../auth/AuthProvider';
 
 export default function Login() {
-  const { isAuthenticated, isLoading, login } = useAuth();
+  const { isAuthenticated, isLoading, login, loginWithCredentials } = useAuth();
+  const [showPasswordForm, setShowPasswordForm] = useState(!isGoogleConfigured());
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   if (isLoading) {
     return (
@@ -17,6 +24,24 @@ export default function Login() {
   if (isAuthenticated) {
     return <Navigate to="/" replace />;
   }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!username.trim() || !password.trim()) {
+      setError('Preencha usuário e senha');
+      return;
+    }
+
+    setSubmitting(true);
+    const result = await loginWithCredentials(username, password);
+    setSubmitting(false);
+
+    if (!result.success) {
+      setError(result.error || 'Falha no login');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-dark-950 flex">
@@ -111,12 +136,100 @@ export default function Login() {
               <p className="text-dark-400 mt-2">Faça login para acessar o painel</p>
             </div>
 
-            <button
-              onClick={login}
-              className="w-full btn-primary flex items-center justify-center gap-3 py-3"
-            >
-              {isGoogleConfigured() ? (
-                <>
+            {/* Username/Password Form */}
+            {showPasswordForm && (
+              <form onSubmit={handleSubmit} className="space-y-4 mb-4">
+                <div>
+                  <label htmlFor="username" className="block text-sm font-medium text-dark-300 mb-1.5">
+                    Usuário
+                  </label>
+                  <input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-dark-800 border border-dark-600 rounded-lg text-dark-100 
+                               placeholder-dark-500 focus:outline-none focus:border-keelo-500 focus:ring-1 focus:ring-keelo-500
+                               transition-colors"
+                    placeholder="Digite seu usuário"
+                    autoComplete="username"
+                    disabled={submitting}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium text-dark-300 mb-1.5">
+                    Senha
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-dark-800 border border-dark-600 rounded-lg text-dark-100 
+                                 placeholder-dark-500 focus:outline-none focus:border-keelo-500 focus:ring-1 focus:ring-keelo-500
+                                 transition-colors pr-12"
+                      placeholder="Digite sua senha"
+                      autoComplete="current-password"
+                      disabled={submitting}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-dark-200 transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <p className="text-sm text-red-400">{error}</p>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full btn-primary flex items-center justify-center gap-2 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <LogIn className="w-5 h-5" />
+                      Entrar
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {/* Google Login */}
+            {isGoogleConfigured() && (
+              <>
+                {showPasswordForm && (
+                  <div className="relative my-6">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-dark-700" />
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="px-3 bg-dark-900 text-dark-500">ou</span>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={login}
+                  className={`w-full flex items-center justify-center gap-3 py-3 ${
+                    showPasswordForm
+                      ? 'bg-dark-800 border border-dark-600 rounded-lg text-dark-200 hover:bg-dark-700 hover:border-dark-500 transition-colors'
+                      : 'btn-primary'
+                  }`}
+                >
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path
                       fill="currentColor"
@@ -136,19 +249,26 @@ export default function Login() {
                     />
                   </svg>
                   Entrar com Google
-                </>
-              ) : (
-                'Entrar (Modo Demo)'
-              )}
-            </button>
+                </button>
 
-            {!isGoogleConfigured() && (
-              <div className="mt-4 p-4 bg-dark-800/50 rounded-lg border border-dark-700">
-                <p className="text-sm text-dark-400">
-                  <span className="text-yellow-500 font-medium">Modo Demo:</span> Google OAuth não está configurado. 
-                  Configure <code className="text-yellow-400">VITE_GOOGLE_CLIENT_ID</code> para habilitar autenticação real.
-                </p>
-              </div>
+                {!showPasswordForm && (
+                  <button
+                    onClick={() => setShowPasswordForm(true)}
+                    className="w-full mt-3 text-sm text-dark-500 hover:text-dark-300 transition-colors"
+                  >
+                    Entrar com usuário e senha
+                  </button>
+                )}
+              </>
+            )}
+
+            {!isGoogleConfigured() && !showPasswordForm && (
+              <button
+                onClick={login}
+                className="w-full btn-primary flex items-center justify-center gap-3 py-3"
+              >
+                Entrar (Modo Demo)
+              </button>
             )}
           </div>
 
