@@ -71,7 +71,7 @@ function checkTypeScriptSyntax(code: string, filename: string): ValidationError[
 
   try {
     // Create a simple compiler host for syntax checking only
-    const compilerOptions: ts.CompilerOptions = {
+    const compilerOptions: import('typescript').CompilerOptions = {
       target: ts.ScriptTarget.ESNext,
       module: ts.ModuleKind.ESNext,
       moduleResolution: ts.ModuleResolutionKind.Bundler,
@@ -92,7 +92,7 @@ function checkTypeScriptSyntax(code: string, filename: string): ValidationError[
     );
 
     // Check for parse errors (syntax errors)
-    const parseErrors = (sourceFile as unknown as { parseDiagnostics?: ts.Diagnostic[] }).parseDiagnostics || [];
+    const parseErrors = (sourceFile as unknown as { parseDiagnostics?: import('typescript').Diagnostic[] }).parseDiagnostics || [];
     
     for (const diagnostic of parseErrors) {
       const position = diagnostic.start !== undefined
@@ -138,17 +138,19 @@ function checkTypeScriptSyntax(code: string, filename: string): ValidationError[
 function createInMemoryCompilerHost(
   filename: string,
   code: string,
-  options: ts.CompilerOptions
-): ts.CompilerHost {
-  const defaultHost = ts.createCompilerHost(options);
+  options: import('typescript').CompilerOptions
+): import('typescript').CompilerHost {
+  // ts is guaranteed non-null here — caller checks before invoking
+  const _ts = ts!;
+  const defaultHost = _ts.createCompilerHost(options);
   
   return {
     ...defaultHost,
-    fileExists: (path) => path === filename || defaultHost.fileExists(path),
-    readFile: (path) => path === filename ? code : defaultHost.readFile(path),
-    getSourceFile: (path, languageVersion) => {
+    fileExists: (path: string) => path === filename || defaultHost.fileExists(path),
+    readFile: (path: string) => path === filename ? code : defaultHost.readFile(path),
+    getSourceFile: (path: string, languageVersion: import('typescript').ScriptTarget) => {
       if (path === filename) {
-        return ts.createSourceFile(path, code, languageVersion, true);
+        return _ts.createSourceFile(path, code, languageVersion, true);
       }
       return defaultHost.getSourceFile(path, languageVersion);
     },
