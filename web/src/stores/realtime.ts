@@ -11,6 +11,7 @@ export interface Analysis {
   id: string;
   type: 'pr' | 'requirements' | 'figma' | 'user_story';
   status: 'pending' | 'processing' | 'completed' | 'failed';
+  version?: string;
   trigger_source?: TriggerSource;
   repository?: string;
   pr_number?: number;
@@ -23,6 +24,9 @@ export interface Analysis {
   scenarios_count: number;
   risks_count: number;
   gaps_count: number;
+  criteria_count?: number;
+  thumbs_up?: number;
+  thumbs_down?: number;
   created_at: string;
   completed_at?: string;
   error_message?: string;

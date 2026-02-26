@@ -20,7 +20,7 @@ export interface Analysis {
   id: string;
   type: 'pr' | 'requirements' | 'figma' | 'user_story';
   status: 'pending' | 'processing' | 'completed' | 'failed';
-  version: string;
+  version?: string;
   trigger_source?: TriggerSource;
   repository_id?: string;
   repository?: string; // full_name from view (e.g. 'owner/repo')
@@ -37,9 +37,9 @@ export interface Analysis {
   scenarios_count: number;
   risks_count: number;
   gaps_count: number;
-  criteria_count: number;
-  thumbs_up: number;
-  thumbs_down: number;
+  criteria_count?: number;
+  thumbs_up?: number;
+  thumbs_down?: number;
   was_helpful?: boolean;
   created_at: string;
   completed_at?: string;

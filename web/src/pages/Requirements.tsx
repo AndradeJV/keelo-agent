@@ -30,7 +30,7 @@ interface QueuedAnalysis {
 
 export default function Requirements() {
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<unknown>(null);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [queuedAnalyses, setQueuedAnalyses] = useState<QueuedAnalysis[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -145,7 +145,7 @@ export default function Requirements() {
         clearFormFields();
       } else {
         // Sync mode - show result directly
-        setResult(response.data);
+        setResult(response.data as Record<string, unknown>);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro desconhecido');
@@ -609,7 +609,7 @@ export default function Requirements() {
               </button>
             </div>
 
-            <ResultSummary data={result as Record<string, unknown>} />
+            <ResultSummary data={result} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -632,9 +632,9 @@ function ResultSummary({ data }: { data: Record<string, unknown> }) {
           <h3 className="font-semibold text-dark-100 text-lg">{summary.title as string}</h3>
           <p className="text-dark-300 mt-2">{summary.description as string}</p>
           <div className="flex gap-4 mt-4 text-sm">
-            {summary.complexity && (
+            {summary.complexity != null && (
               <span className="px-2 py-1 bg-dark-800 rounded text-dark-300">
-                Complexidade: <span className="text-dark-100">{summary.complexity as string}</span>
+                Complexidade: <span className="text-dark-100">{String(summary.complexity)}</span>
               </span>
             )}
           </div>

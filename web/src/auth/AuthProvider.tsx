@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { OktaAuth, AuthState } from '@okta/okta-auth-js';
 import { oktaConfig, isOktaConfigured } from './config';
 
@@ -100,7 +100,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             id: userInfo.sub || '',
             email: userInfo.email || '',
             name: userInfo.name || userInfo.email || '',
-            avatar: userInfo.picture,
+            avatar: typeof userInfo.picture === 'string' ? userInfo.picture : undefined,
           });
         }
       } catch (error) {
