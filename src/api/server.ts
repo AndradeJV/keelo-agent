@@ -36,6 +36,22 @@ import { startWeeklyReportScheduler } from '../core/weekly-report-scheduler.js';
 
 const app = express();
 
+// CORS - allow frontend (Vercel) to call backend (Render)
+app.use((_req, res, next) => {
+  const origin = _req.headers.origin;
+  const allowedOrigin = process.env.CORS_ORIGIN || '*';
+  
+  res.setHeader('Access-Control-Allow-Origin', allowedOrigin === '*' ? '*' : (origin || '*'));
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
+  if (_req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 // Increase limit for image uploads
 app.use(express.json({ 
   limit: '50mb',
