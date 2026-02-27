@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import dns from 'node:dns';
 import { logger } from '../config/index.js';
 
 // =============================================================================
@@ -23,6 +24,10 @@ export function initEmailService(): boolean {
     logger.warn('SMTP not configured (SMTP_HOST, SMTP_USER, SMTP_PASS) — email sending disabled');
     return false;
   }
+
+  // Force IPv4 DNS resolution — Render and some cloud providers don't support IPv6 outbound.
+  // Without this, Gmail (smtp.gmail.com) resolves to an IPv6 address first and fails with ENETUNREACH.
+  dns.setDefaultResultOrder('ipv4first');
 
   transporter = nodemailer.createTransport({
     host: SMTP_HOST,
