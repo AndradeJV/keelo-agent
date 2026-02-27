@@ -16,31 +16,72 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 let transporter: nodemailer.Transporter | null = null;
 
 /**
+ * Resolve a hostname to its IPv4 address.
+ * Cloud providers like Render don't support IPv6 outbound, so smtp.gmail.com
+ * (which resolves to IPv6 first) fails with ENETUNREACH.
+ */
+async function resolveIPv4(hostname: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    dns.lookup(hostname, { family: 4 }, (err, address) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(address);
+      }
+    });
+  });
+}
+
+/**
  * Initialize the email transporter.
  * Returns true if email is configured and ready.
  */
-export function initEmailService(): boolean {
+export async function initEmailService(): Promise<boolean> {
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
     logger.warn('SMTP not configured (SMTP_HOST, SMTP_USER, SMTP_PASS) — email sending disabled');
     return false;
   }
 
-  // Force IPv4 DNS resolution — Render and some cloud providers don't support IPv6 outbound.
-  // Without this, Gmail (smtp.gmail.com) resolves to an IPv6 address first and fails with ENETUNREACH.
-  dns.setDefaultResultOrder('ipv4first');
+  try {
+    // Resolve hostname to IPv4 to avoid IPv6 issues on cloud providers (Render, etc.)
+    let smtpHost = SMTP_HOST;
+    try {
+      const ipv4 = await resolveIPv4(SMTP_HOST);
+      logger.info({ originalHost: SMTP_HOST, resolvedIPv4: ipv4 }, 'Resolved SMTP host to IPv4');
+      smtpHost = ipv4;
+    } catch (dnsErr) {
+      logger.warn({ host: SMTP_HOST, error: (dnsErr as Error).message }, 'Could not resolve SMTP host to IPv4, using original hostname');
+    }
 
-  transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465,
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-    },
-  });
+    transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: SMTP_PORT,
+      secure: SMTP_PORT === 465,
+      auth: {
+        user: SMTP_USER,
+        pass: SMTP_PASS,
+      },
+      // Send the original hostname in EHLO/HELO, not the IP
+      name: SMTP_HOST,
+      tls: {
+        // Gmail expects the certificate to match smtp.gmail.com, not the IP
+        servername: SMTP_HOST,
+      },
+    });
 
-  logger.info({ host: SMTP_HOST, port: SMTP_PORT, user: SMTP_USER }, 'Email service initialized');
-  return true;
+    // Verify SMTP connection at startup
+    try {
+      await transporter.verify();
+      logger.info({ host: smtpHost, port: SMTP_PORT, user: SMTP_USER }, 'Email service initialized and SMTP connection verified');
+    } catch (verifyErr) {
+      logger.error({ error: (verifyErr as Error).message, host: smtpHost, port: SMTP_PORT }, 'SMTP connection verification failed — emails may not work');
+    }
+
+    return true;
+  } catch (error) {
+    logger.error({ error: (error as Error).message }, 'Failed to initialize email service');
+    return false;
+  }
 }
 
 /**
@@ -182,4 +223,3 @@ export async function sendVerificationEmail(
 }
 
 export { FRONTEND_URL };
-

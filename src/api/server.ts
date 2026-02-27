@@ -730,7 +730,7 @@ export async function startServer(): Promise<void> {
   await seedAdminUser();
   
   // Initialize email service
-  initEmailService();
+  await initEmailService();
   
   // Load configuration from database
   try {
