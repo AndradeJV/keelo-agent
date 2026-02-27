@@ -22,10 +22,15 @@ export default function Login() {
   // Handle query params (confirmed email, errors)
   useEffect(() => {
     const confirmed = searchParams.get('confirmed');
+    const reset = searchParams.get('reset');
     const errorParam = searchParams.get('error');
 
     if (confirmed === 'true') {
       setInfo('Email confirmado com sucesso! Faça login para continuar.');
+    }
+    if (reset === 'true') {
+      setInfo('Senha redefinida com sucesso! Faça login com sua nova senha.');
+      setShowPasswordForm(true);
     }
     if (errorParam) {
       setError(decodeURIComponent(errorParam));
@@ -281,9 +286,18 @@ export default function Login() {
                   </div>
 
                   <div>
-                    <label htmlFor="password" className="block text-sm font-medium text-dark-300 mb-1.5">
-                      Senha
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label htmlFor="password" className="block text-sm font-medium text-dark-300">
+                        Senha
+                      </label>
+                      <Link
+                        to="/forgot-password"
+                        className="text-xs text-keelo-400 hover:text-keelo-300 transition-colors"
+                        tabIndex={-1}
+                      >
+                        Esqueci minha senha
+                      </Link>
+                    </div>
                     <div className="relative">
                       <input
                         id="password"

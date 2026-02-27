@@ -332,6 +332,65 @@ export async function upsertGithubUser(data: {
 }
 
 // =============================================================================
+// Password Reset
+// =============================================================================
+
+/**
+ * Generate a password reset token for a user (found by email).
+ * Token expires in 1 hour.
+ * Returns null if the email is not found (caller should NOT reveal this).
+ */
+export async function createPasswordResetToken(email: string): Promise<{ user: UserRecord; resetToken: string } | null> {
+  if (!isDatabaseEnabled()) return null;
+
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+  const user = await queryOne<UserRecord>(
+    `UPDATE users
+     SET password_reset_token = $1,
+         password_reset_expires = $2
+     WHERE email = $3
+     RETURNING *`,
+    [resetToken, expires, email]
+  );
+
+  if (!user) return null;
+
+  logger.info({ userId: user.id, email: user.email }, 'Password reset token generated');
+  return { user, resetToken };
+}
+
+/**
+ * Reset a user's password using a valid reset token.
+ * Clears the token after use.
+ * Returns the updated user or null if token is invalid/expired.
+ */
+export async function resetPasswordWithToken(token: string, newPassword: string): Promise<UserRecord | null> {
+  if (!isDatabaseEnabled()) return null;
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+
+  const user = await queryOne<UserRecord>(
+    `UPDATE users
+     SET password_hash = $1,
+         password_reset_token = NULL,
+         password_reset_expires = NULL,
+         email_verified = TRUE
+     WHERE password_reset_token = $2
+       AND password_reset_expires > NOW()
+     RETURNING *`,
+    [passwordHash, token]
+  );
+
+  if (user) {
+    logger.info({ userId: user.id, email: user.email }, 'Password reset successfully');
+  }
+
+  return user;
+}
+
+// =============================================================================
 // Admin Seed
 // =============================================================================
 

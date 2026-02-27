@@ -85,6 +85,8 @@ export {
   registerUserWithEmail,
   confirmUserEmail,
   regenerateVerificationToken,
+  createPasswordResetToken,
+  resetPasswordWithToken,
   seedAdminUser,
   type UserRecord,
 } from './repositories/user-repository.js';

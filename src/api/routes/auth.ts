@@ -11,9 +11,11 @@ import {
   registerUserWithEmail,
   confirmUserEmail,
   regenerateVerificationToken,
+  createPasswordResetToken,
+  resetPasswordWithToken,
 } from '../../database/index.js';
 import { signToken, requireAuth } from '../middleware/auth.js';
-import { sendVerificationEmail, isEmailEnabled, verifyEmailConnection, getEmailDiagnostics, FRONTEND_URL } from '../../services/email.js';
+import { sendVerificationEmail, sendPasswordResetEmail, isEmailEnabled, verifyEmailConnection, getEmailDiagnostics, FRONTEND_URL } from '../../services/email.js';
 
 // =============================================================================
 // Google OAuth Client
@@ -468,6 +470,87 @@ router.post('/login', async (req: Request, res: Response) => {
       error: 'Falha no login',
       details: error instanceof Error ? error.message : 'Erro desconhecido',
     });
+  }
+});
+
+/**
+ * POST /auth/forgot-password
+ * 
+ * Generates a password reset token and sends an email.
+ * Always returns success to prevent email enumeration.
+ * Accepts { email: string }
+ */
+router.post('/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email é obrigatório' });
+    }
+
+    if (!isDatabaseEnabled()) {
+      return res.status(503).json({ error: 'Banco de dados não disponível' });
+    }
+
+    if (!isEmailEnabled()) {
+      return res.status(503).json({ error: 'Serviço de email não configurado' });
+    }
+
+    // Generate reset token (returns null if email not found — but we don't reveal that)
+    const result = await createPasswordResetToken(email);
+
+    if (result) {
+      await sendPasswordResetEmail(result.user.email, result.user.name || 'Usuário', result.resetToken);
+    }
+
+    // Always return success to prevent email enumeration
+    res.json({
+      success: true,
+      message: 'Se o email estiver cadastrado, você receberá um link para redefinir sua senha.',
+    });
+  } catch (error) {
+    logger.error({ error }, 'Forgot password failed');
+    res.status(500).json({ error: 'Falha ao processar solicitação' });
+  }
+});
+
+/**
+ * POST /auth/reset-password
+ * 
+ * Resets a user's password using a valid reset token.
+ * Accepts { token: string, password: string }
+ */
+router.post('/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token e nova senha são obrigatórios' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'A senha deve ter pelo menos 8 caracteres' });
+    }
+
+    if (!isDatabaseEnabled()) {
+      return res.status(503).json({ error: 'Banco de dados não disponível' });
+    }
+
+    const user = await resetPasswordWithToken(token, password);
+
+    if (!user) {
+      return res.status(400).json({ error: 'Token expirado ou inválido. Solicite um novo link de redefinição.' });
+    }
+
+    logger.info({ userId: user.id, email: user.email }, 'Password reset via token');
+
+    res.json({
+      success: true,
+      message: 'Senha redefinida com sucesso! Faça login com sua nova senha.',
+    });
+  } catch (error) {
+    logger.error({ error }, 'Password reset failed');
+    res.status(500).json({ error: 'Falha ao redefinir senha' });
   }
 });
 
