@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { analyzeRequirements } from '../stores/api';
 import { useRealtimeStore } from '../stores/realtime';
+import { useWorkspaceStore } from '../stores/workspace';
 import RiskBadge from '../components/RiskBadge';
 
 interface QueuedAnalysis {
@@ -34,6 +35,9 @@ export default function Requirements() {
   const [error, setError] = useState<string | null>(null);
   const [queuedAnalyses, setQueuedAnalyses] = useState<QueuedAnalysis[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Workspace context — link analyses to active org/project
+  const { currentOrg, currentProject } = useWorkspaceStore();
 
   // Requisitos textuais
   const [userStory, setUserStory] = useState('');
@@ -118,8 +122,10 @@ export default function Requirements() {
         figmaImage: figmaImage || undefined,
         pdfBase64: pdfContent || undefined,
         requirements: requirements || undefined,
+        projectId: currentProject?.id || undefined,
+        organizationId: currentOrg?.id || undefined,
         metadata: {
-          projectName: projectName || undefined,
+          projectName: projectName || currentProject?.name || undefined,
           featureName: featureName || undefined,
           sprint: sprint || undefined,
         },

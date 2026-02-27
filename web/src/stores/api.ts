@@ -90,6 +90,8 @@ export interface RequirementsInput {
   figmaImage?: string;
   requirements?: string;
   pdfBase64?: string;
+  projectId?: string;
+  organizationId?: string;
   metadata?: {
     projectName?: string;
     featureName?: string;

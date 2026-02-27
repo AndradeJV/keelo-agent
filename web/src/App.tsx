@@ -14,6 +14,7 @@ import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Callback from './pages/Callback';
+import Onboarding from './pages/Onboarding';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -46,6 +47,15 @@ export default function App() {
       <Route path="/callback" element={<Callback />} />
       
       <Route
+        path="/onboarding"
+        element={
+          <PrivateRoute>
+            <Onboarding />
+          </PrivateRoute>
+        }
+      />
+      
+      <Route
         path="/"
         element={
           <PrivateRoute>
@@ -68,4 +78,3 @@ export default function App() {
     </Routes>
   );
 }
-

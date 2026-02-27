@@ -376,11 +376,11 @@ export default function Dashboard() {
             Para começar, crie uma organização e adicione seus projetos.
           </p>
           <Link
-            to="/settings"
+            to="/onboarding"
             className="inline-flex items-center gap-2 px-4 py-2 bg-keelo-500 text-white rounded-lg font-medium hover:bg-keelo-600 transition-colors"
           >
             <Building2 size={18} />
-            Ir para Configurações
+            Criar organização
           </Link>
         </motion.div>
       )}

@@ -13,15 +13,32 @@ import {
   Sparkles,
   GitBranch,
   MessageSquare,
+  Building2,
+  FolderKanban,
+  Users,
+  Plus,
+  Trash2,
+  Crown,
+  UserPlus,
+  Mail,
 } from 'lucide-react';
 import { 
   getSettings, 
   getSettingsOptions, 
   updateSettings, 
   resetSettings,
+  getProjects,
+  createProjectApi,
+  getOrgMembers,
+  addOrgMemberApi,
+  removeOrgMemberApi,
+  deleteProjectApi,
   type KeeloConfig,
-  type ConfigOptions
+  type ConfigOptions,
+  type Project,
+  type OrgMember,
 } from '../stores/api';
+import { useWorkspaceStore } from '../stores/workspace';
 
 export default function Settings() {
   const [config, setConfig] = useState<KeeloConfig | null>(null);
@@ -30,9 +47,29 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Organization management state
+  const { currentOrg } = useWorkspaceStore();
+  const [orgProjects, setOrgProjects] = useState<Project[]>([]);
+  const [orgMembers, setOrgMembers] = useState<OrgMember[]>([]);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectSlug, setNewProjectSlug] = useState('');
+  const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [orgActionLoading, setOrgActionLoading] = useState(false);
+  const [orgError, setOrgError] = useState<string | null>(null);
+  const [orgSuccess, setOrgSuccess] = useState<string | null>(null);
+  const [activeOrgTab, setActiveOrgTab] = useState<'projects' | 'members'>('projects');
+
   useEffect(() => {
     loadData();
   }, []);
+
+  // Load org projects and members when org changes
+  useEffect(() => {
+    if (currentOrg) {
+      loadOrgData(currentOrg.id);
+    }
+  }, [currentOrg?.id]);
 
   async function loadData() {
     try {
@@ -48,6 +85,100 @@ export default function Settings() {
       setError('Falha ao carregar configurações');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadOrgData(orgId: string) {
+    try {
+      const [projectsRes, membersRes] = await Promise.all([
+        getProjects(orgId),
+        getOrgMembers(orgId),
+      ]);
+      if (projectsRes.success) setOrgProjects(projectsRes.data);
+      if (membersRes.success) setOrgMembers(membersRes.data);
+    } catch {
+      // Silent fail
+    }
+  }
+
+  async function handleCreateProject(e: React.FormEvent) {
+    e.preventDefault();
+    if (!currentOrg || !newProjectName.trim()) return;
+
+    setOrgActionLoading(true);
+    setOrgError(null);
+    try {
+      const slug = newProjectSlug.trim() || newProjectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const res = await createProjectApi(currentOrg.id, {
+        name: newProjectName.trim(),
+        slug,
+      });
+      if (res.success) {
+        setNewProjectName('');
+        setNewProjectSlug('');
+        setOrgSuccess('Projeto criado!');
+        setTimeout(() => setOrgSuccess(null), 3000);
+        await loadOrgData(currentOrg.id);
+      } else {
+        setOrgError(res.error || 'Falha ao criar projeto');
+      }
+    } catch {
+      setOrgError('Erro de conexão');
+    } finally {
+      setOrgActionLoading(false);
+    }
+  }
+
+  async function handleDeleteProject(projectId: string) {
+    if (!currentOrg || !confirm('Tem certeza? Todas as análises deste projeto serão excluídas.')) return;
+
+    try {
+      const res = await deleteProjectApi(currentOrg.id, projectId);
+      if (res.success) {
+        await loadOrgData(currentOrg.id);
+        setOrgSuccess('Projeto excluído');
+        setTimeout(() => setOrgSuccess(null), 3000);
+      }
+    } catch {
+      setOrgError('Falha ao excluir projeto');
+    }
+  }
+
+  async function handleAddMember(e: React.FormEvent) {
+    e.preventDefault();
+    if (!currentOrg || !newMemberEmail.trim()) return;
+
+    setOrgActionLoading(true);
+    setOrgError(null);
+    try {
+      const res = await addOrgMemberApi(currentOrg.id, newMemberEmail.trim());
+      if (res.success) {
+        setNewMemberEmail('');
+        setOrgSuccess('Membro adicionado!');
+        setTimeout(() => setOrgSuccess(null), 3000);
+        await loadOrgData(currentOrg.id);
+      } else {
+        setOrgError(res.error || res.message || 'Falha ao adicionar membro');
+      }
+    } catch {
+      setOrgError('Erro de conexão');
+    } finally {
+      setOrgActionLoading(false);
+    }
+  }
+
+  async function handleRemoveMember(userId: string) {
+    if (!currentOrg || !confirm('Tem certeza que deseja remover este membro?')) return;
+
+    try {
+      const res = await removeOrgMemberApi(currentOrg.id, userId);
+      if (res.success) {
+        await loadOrgData(currentOrg.id);
+        setOrgSuccess('Membro removido');
+        setTimeout(() => setOrgSuccess(null), 3000);
+      }
+    } catch {
+      setOrgError('Falha ao remover membro');
     }
   }
 
@@ -189,6 +320,193 @@ export default function Settings() {
           <Check className="w-5 h-5 text-green-500" />
           <p className="text-green-400">{success}</p>
         </motion.div>
+      )}
+
+      {/* Organization Management */}
+      {currentOrg && (
+        <div className="space-y-4">
+          <Section
+            title={`Organização: ${currentOrg.name}`}
+            icon={<Building2 className="w-5 h-5" />}
+            color="keelo"
+          >
+            <div className="space-y-4">
+              {/* Tab Switcher */}
+              <div className="flex gap-1 p-1 bg-dark-800/50 rounded-lg">
+                <button
+                  onClick={() => setActiveOrgTab('projects')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${
+                    activeOrgTab === 'projects'
+                      ? 'bg-dark-700 text-dark-100'
+                      : 'text-dark-400 hover:text-dark-200'
+                  }`}
+                >
+                  <FolderKanban size={16} />
+                  Projetos ({orgProjects.length})
+                </button>
+                <button
+                  onClick={() => setActiveOrgTab('members')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${
+                    activeOrgTab === 'members'
+                      ? 'bg-dark-700 text-dark-100'
+                      : 'text-dark-400 hover:text-dark-200'
+                  }`}
+                >
+                  <Users size={16} />
+                  Membros ({orgMembers.length})
+                </button>
+              </div>
+
+              {/* Messages */}
+              {orgError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                  <p className="text-sm text-red-400">{orgError}</p>
+                </div>
+              )}
+              {orgSuccess && (
+                <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <p className="text-sm text-green-400">{orgSuccess}</p>
+                </div>
+              )}
+
+              {/* Projects Tab */}
+              {activeOrgTab === 'projects' && (
+                <div className="space-y-3">
+                  {/* Project List */}
+                  {orgProjects.length > 0 ? (
+                    <div className="space-y-2">
+                      {orgProjects.map((project) => (
+                        <div
+                          key={project.id}
+                          className="flex items-center justify-between p-3 bg-dark-800/50 rounded-lg"
+                        >
+                          <div className="flex items-center gap-3">
+                            <FolderKanban size={16} className="text-purple-400" />
+                            <div>
+                              <p className="text-sm font-medium text-dark-100">{project.name}</p>
+                              <p className="text-xs text-dark-500">{project.slug} · {project.analysis_count || 0} análises</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteProject(project.id)}
+                            className="p-1.5 text-dark-500 hover:text-red-400 transition-colors"
+                            title="Excluir projeto"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-dark-500 text-center py-4">
+                      Nenhum projeto ainda. Crie um abaixo.
+                    </p>
+                  )}
+
+                  {/* Create Project Form */}
+                  <form onSubmit={handleCreateProject} className="flex gap-2 pt-2 border-t border-dark-700/50">
+                    <input
+                      type="text"
+                      value={newProjectName}
+                      onChange={(e) => {
+                        setNewProjectName(e.target.value);
+                        setNewProjectSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+                      }}
+                      placeholder="Nome do projeto"
+                      className="flex-1 px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-keelo-500"
+                      disabled={orgActionLoading}
+                    />
+                    <button
+                      type="submit"
+                      disabled={orgActionLoading || !newProjectName.trim()}
+                      className="px-3 py-2 bg-keelo-500 text-white rounded-lg text-sm font-medium hover:bg-keelo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                    >
+                      <Plus size={14} />
+                      Criar
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Members Tab */}
+              {activeOrgTab === 'members' && (
+                <div className="space-y-3">
+                  {/* Member List */}
+                  {orgMembers.length > 0 ? (
+                    <div className="space-y-2">
+                      {orgMembers.map((member) => (
+                        <div
+                          key={member.id}
+                          className="flex items-center justify-between p-3 bg-dark-800/50 rounded-lg"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-keelo-500 to-keelo-600 flex items-center justify-center">
+                              <span className="text-white text-xs font-medium">
+                                {(member.user_name || member.user_email || '?').charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-dark-100">
+                                {member.user_name || member.user_email}
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs text-dark-500">{member.user_email}</p>
+                                {member.role === 'owner' && (
+                                  <span className="flex items-center gap-0.5 text-xs text-amber-400">
+                                    <Crown size={10} /> Owner
+                                  </span>
+                                )}
+                                {member.role === 'admin' && (
+                                  <span className="text-xs text-keelo-400">Admin</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          {member.role !== 'owner' && (
+                            <button
+                              onClick={() => handleRemoveMember(member.user_id)}
+                              className="p-1.5 text-dark-500 hover:text-red-400 transition-colors"
+                              title="Remover membro"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-dark-500 text-center py-4">
+                      Nenhum membro além de você.
+                    </p>
+                  )}
+
+                  {/* Add Member Form */}
+                  <form onSubmit={handleAddMember} className="flex gap-2 pt-2 border-t border-dark-700/50">
+                    <div className="flex-1 relative">
+                      <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500" />
+                      <input
+                        type="email"
+                        value={newMemberEmail}
+                        onChange={(e) => setNewMemberEmail(e.target.value)}
+                        placeholder="email@exemplo.com"
+                        className="w-full pl-8 pr-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-keelo-500"
+                        disabled={orgActionLoading}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={orgActionLoading || !newMemberEmail.trim()}
+                      className="px-3 py-2 bg-keelo-500 text-white rounded-lg text-sm font-medium hover:bg-keelo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                    >
+                      <UserPlus size={14} />
+                      Convidar
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          </Section>
+        </div>
       )}
 
       {/* Sections - Full Width Layout */}

@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   LayoutDashboard,
@@ -13,12 +13,14 @@ import {
   X,
   Building2,
   FolderKanban,
+  Plus,
+  ChevronsUpDown,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import NotificationsDropdown from './NotificationsDropdown';
 import { useWorkspaceStore } from '../stores/workspace';
-import { getOrganizations, getProjects } from '../stores/api';
+import { getOrganizations, getProjects, createProjectApi } from '../stores/api';
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -33,7 +35,9 @@ const navItems = [
 export default function Layout() {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
   
   const {
     currentOrg,
@@ -46,7 +50,7 @@ export default function Layout() {
     setProjects,
   } = useWorkspaceStore();
 
-  // Load organizations on mount
+  // Load organizations on mount + onboarding guard
   useEffect(() => {
     loadOrganizations();
   }, []);
@@ -63,13 +67,22 @@ export default function Layout() {
       const res = await getOrganizations();
       if (res.success) {
         setOrganizations(res.data);
+        
+        // Onboarding guard: if user has no organizations, redirect to onboarding
+        if (res.data.length === 0) {
+          navigate('/onboarding', { replace: true });
+          return;
+        }
+
         // Auto-select first org if none selected
         if (!currentOrg && res.data.length > 0) {
           setCurrentOrg(res.data[0]);
         }
       }
     } catch {
-      // Silent fail - will show empty state
+      // Silent fail
+    } finally {
+      setOnboardingChecked(true);
     }
   }
 
@@ -92,6 +105,15 @@ export default function Layout() {
   function handleProjectChange(projectId: string) {
     const project = projects.find((p) => p.id === projectId) || null;
     setCurrentProject(project);
+  }
+
+  // Don't render until onboarding check is done
+  if (!onboardingChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-dark-950">
+        <div className="w-8 h-8 border-4 border-keelo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
   return (
@@ -199,41 +221,42 @@ export default function Layout() {
           {/* Workspace Selector */}
           <div className="flex items-center gap-3 ml-2">
             {/* Organization Selector */}
-            {organizations.length > 0 && (
-              <div className="flex items-center gap-2">
-                <Building2 size={16} className="text-dark-400" />
-                <select
-                  value={currentOrg?.id || ''}
-                  onChange={(e) => handleOrgChange(e.target.value)}
-                  className="bg-dark-800 border border-dark-700 rounded-lg px-3 py-1.5 text-sm text-dark-100 focus:outline-none focus:ring-2 focus:ring-keelo-500 focus:border-transparent max-w-[180px]"
-                >
-                  {organizations.map((org) => (
-                    <option key={org.id} value={org.id}>
-                      {org.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <WorkspaceDropdown
+              icon={<Building2 size={16} className="text-dark-400" />}
+              items={organizations.map((o) => ({ id: o.id, label: o.name }))}
+              selectedId={currentOrg?.id || ''}
+              onChange={handleOrgChange}
+              onCreateNew={() => navigate('/onboarding')}
+              createLabel="Nova organização"
+              placeholder="Selecione org"
+            />
 
             {/* Project Selector */}
-            {currentOrg && projects.length > 0 && (
-              <div className="flex items-center gap-2">
+            {currentOrg && (
+              <>
                 <span className="text-dark-600">/</span>
-                <FolderKanban size={16} className="text-dark-400" />
-                <select
-                  value={currentProject?.id || ''}
-                  onChange={(e) => handleProjectChange(e.target.value)}
-                  className="bg-dark-800 border border-dark-700 rounded-lg px-3 py-1.5 text-sm text-dark-100 focus:outline-none focus:ring-2 focus:ring-keelo-500 focus:border-transparent max-w-[180px]"
-                >
-                  <option value="">Todos os projetos</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name} ({project.analysis_count})
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <WorkspaceDropdown
+                  icon={<FolderKanban size={16} className="text-dark-400" />}
+                  items={projects.map((p) => ({ id: p.id, label: p.name }))}
+                  selectedId={currentProject?.id || ''}
+                  onChange={handleProjectChange}
+                  onCreateNew={async () => {
+                    const name = prompt('Nome do projeto:');
+                    if (!name) return;
+                    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                    try {
+                      const res = await createProjectApi(currentOrg.id, { name, slug });
+                      if (res.success && res.data) {
+                        await loadProjects(currentOrg.id);
+                        setCurrentProject(res.data as any);
+                      }
+                    } catch { /* silent */ }
+                  }}
+                  createLabel="Novo projeto"
+                  placeholder="Todos os projetos"
+                  allowAll
+                />
+              </>
             )}
           </div>
 
@@ -259,3 +282,108 @@ export default function Layout() {
   );
 }
 
+// =============================================================================
+// Workspace Dropdown Component
+// =============================================================================
+
+interface DropdownItem {
+  id: string;
+  label: string;
+}
+
+interface WorkspaceDropdownProps {
+  icon: React.ReactNode;
+  items: DropdownItem[];
+  selectedId: string;
+  onChange: (id: string) => void;
+  onCreateNew?: () => void;
+  createLabel?: string;
+  placeholder?: string;
+  allowAll?: boolean;
+}
+
+function WorkspaceDropdown({
+  icon,
+  items,
+  selectedId,
+  onChange,
+  onCreateNew,
+  createLabel = 'Criar novo',
+  placeholder = 'Selecione',
+  allowAll = false,
+}: WorkspaceDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const selectedItem = items.find((i) => i.id === selectedId);
+
+  // Close on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 px-3 py-1.5 bg-dark-800 border border-dark-700 rounded-lg hover:border-dark-600 transition-colors max-w-[200px]"
+      >
+        {icon}
+        <span className="text-sm text-dark-100 truncate">
+          {selectedItem?.label || placeholder}
+        </span>
+        <ChevronsUpDown size={14} className="text-dark-500 flex-shrink-0" />
+      </button>
+
+      {open && (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-full left-0 mt-1 w-56 bg-dark-800 border border-dark-700 rounded-lg shadow-xl z-50 py-1 overflow-hidden"
+        >
+          {allowAll && (
+            <button
+              onClick={() => { onChange(''); setOpen(false); }}
+              className={`w-full text-left px-3 py-2 text-sm hover:bg-dark-700 transition-colors ${
+                !selectedId ? 'text-keelo-400 bg-keelo-500/10' : 'text-dark-300'
+              }`}
+            >
+              {placeholder}
+            </button>
+          )}
+
+          {items.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => { onChange(item.id); setOpen(false); }}
+              className={`w-full text-left px-3 py-2 text-sm hover:bg-dark-700 transition-colors ${
+                item.id === selectedId ? 'text-keelo-400 bg-keelo-500/10' : 'text-dark-200'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+
+          {onCreateNew && (
+            <>
+              <div className="border-t border-dark-700 my-1" />
+              <button
+                onClick={() => { onCreateNew(); setOpen(false); }}
+                className="w-full text-left px-3 py-2 text-sm text-keelo-400 hover:bg-dark-700 transition-colors flex items-center gap-2"
+              >
+                <Plus size={14} />
+                {createLabel}
+              </button>
+            </>
+          )}
+        </motion.div>
+      )}
+    </div>
+  );
+}
