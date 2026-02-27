@@ -128,15 +128,20 @@ export interface Organization {
   updated_at: string;
 }
 
+export type MemberStatus = 'active' | 'invited' | 'inactive';
+
 export interface OrgMember {
   id: string;
   organization_id: string;
   user_id: string;
   role: 'owner' | 'admin' | 'member';
+  status: MemberStatus;
   user_email?: string;
   user_name?: string;
   user_avatar?: string;
   joined_at: string;
+  last_active_at: string | null;
+  invited_at: string | null;
 }
 
 export interface Project {
@@ -806,6 +811,14 @@ export async function addOrgMemberApi(orgId: string, email: string, role = 'memb
 export async function removeOrgMemberApi(orgId: string, userId: string): Promise<{ success: boolean; error?: string }> {
   const response = await fetchWithAuth(`/organizations/${orgId}/members/${userId}`, {
     method: 'DELETE',
+  });
+  return response.json();
+}
+
+export async function updateMemberStatusApi(orgId: string, userId: string, status: MemberStatus): Promise<{ success: boolean; data?: OrgMember; error?: string }> {
+  const response = await fetchWithAuth(`/organizations/${orgId}/members/${userId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
   });
   return response.json();
 }

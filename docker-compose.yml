@@ -93,6 +93,7 @@ services:
       - ./database/migrations/009_add_email_verification_and_github.sql:/docker-entrypoint-initdb.d/10_009.sql:ro
       - ./database/migrations/010_add_password_reset.sql:/docker-entrypoint-initdb.d/11_010.sql:ro
       - ./database/migrations/011_add_plans_and_billing.sql:/docker-entrypoint-initdb.d/12_011.sql:ro
+      - ./database/migrations/012_add_member_status.sql:/docker-entrypoint-initdb.d/13_012.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keelo -d keelo"]
       interval: 5s

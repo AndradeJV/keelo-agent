@@ -12,7 +12,9 @@ import {
   removeOrgMember,
   getOrgMembership,
   transferOwnership,
+  updateMemberStatus,
   findUserByEmail,
+  type MemberStatus,
   getOrgProjects,
   createProject,
   getProjectById,
@@ -321,6 +323,37 @@ router.delete('/:orgId/members/:userId', requireDatabase, requireOrgAdmin, async
     logger.error({ error }, 'Failed to remove member');
     res.status(400).json({
       error: 'Falha ao remover membro',
+      details: error instanceof Error ? error.message : 'Erro desconhecido',
+    });
+  }
+});
+
+/**
+ * PATCH /organizations/:orgId/members/:userId/status
+ * Update a member's status (admin/owner only)
+ */
+router.patch('/:orgId/members/:userId/status', requireDatabase, requireOrgAdmin, async (req: Request, res: Response) => {
+  try {
+    const { status } = req.body as { status: MemberStatus };
+
+    if (!status || !['active', 'invited', 'inactive'].includes(status)) {
+      return res.status(400).json({ error: 'Status inválido. Use: active, invited, inactive' });
+    }
+
+    const updated = await updateMemberStatus(req.params.orgId, req.params.userId, status);
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Membro não encontrado' });
+    }
+
+    res.json({
+      success: true,
+      data: updated,
+    });
+  } catch (error) {
+    logger.error({ error }, 'Failed to update member status');
+    res.status(400).json({
+      error: 'Falha ao atualizar status',
       details: error instanceof Error ? error.message : 'Erro desconhecido',
     });
   }

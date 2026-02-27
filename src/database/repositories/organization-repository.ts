@@ -15,13 +15,18 @@ export interface OrganizationRecord {
   updated_at: Date;
 }
 
+export type MemberStatus = 'active' | 'invited' | 'inactive';
+
 export interface OrgMemberRecord {
   id: string;
   organization_id: string;
   user_id: string;
   role: 'owner' | 'admin' | 'member';
+  status: MemberStatus;
   invited_by: string | null;
   joined_at: Date;
+  last_active_at: Date | null;
+  invited_at: Date | null;
   // Joined fields
   user_email?: string;
   user_name?: string;
@@ -212,7 +217,10 @@ export async function getOrgMembers(organizationId: string): Promise<OrgMemberRe
      FROM org_members om
      JOIN users u ON u.id = om.user_id
      WHERE om.organization_id = $1
-     ORDER BY om.role ASC, u.name ASC`,
+     ORDER BY 
+       CASE om.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+       CASE om.status WHEN 'active' THEN 0 WHEN 'invited' THEN 1 ELSE 2 END,
+       u.name ASC`,
     [organizationId]
   );
 }
@@ -225,21 +233,58 @@ export async function addOrgMember(data: {
   userId: string;
   role?: 'admin' | 'member';
   invitedBy?: string;
+  status?: MemberStatus;
 }): Promise<OrgMemberRecord> {
   if (!isDatabaseEnabled()) throw new Error('Database not enabled');
 
+  const status = data.status || (data.invitedBy ? 'invited' : 'active');
+
   const result = await queryOne<OrgMemberRecord>(
-    `INSERT INTO org_members (organization_id, user_id, role, invited_by)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (organization_id, user_id) DO UPDATE SET role = $3
+    `INSERT INTO org_members (organization_id, user_id, role, invited_by, status, invited_at)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (organization_id, user_id) DO UPDATE SET role = $3, status = $5
      RETURNING *`,
-    [data.organizationId, data.userId, data.role || 'member', data.invitedBy || null]
+    [data.organizationId, data.userId, data.role || 'member', data.invitedBy || null, status, data.invitedBy ? new Date() : null]
   );
 
   if (!result) throw new Error('Falha ao adicionar membro');
 
-  logger.info({ orgId: data.organizationId, userId: data.userId, role: data.role }, 'Member added to organization');
+  logger.info({ orgId: data.organizationId, userId: data.userId, role: data.role, status }, 'Member added to organization');
   return result;
+}
+
+/**
+ * Update a member's status
+ */
+export async function updateMemberStatus(
+  organizationId: string,
+  userId: string,
+  status: MemberStatus
+): Promise<OrgMemberRecord | null> {
+  if (!isDatabaseEnabled()) return null;
+
+  return queryOne<OrgMemberRecord>(
+    `UPDATE org_members SET status = $3 WHERE organization_id = $1 AND user_id = $2 RETURNING *`,
+    [organizationId, userId, status]
+  );
+}
+
+/**
+ * Update last_active_at for a member (called on API activity)
+ */
+export async function touchMemberActivity(
+  organizationId: string,
+  userId: string
+): Promise<void> {
+  if (!isDatabaseEnabled()) return;
+
+  await queryOne(
+    `UPDATE org_members 
+     SET last_active_at = NOW(), 
+         status = CASE WHEN status = 'invited' THEN 'active' ELSE status END
+     WHERE organization_id = $1 AND user_id = $2`,
+    [organizationId, userId]
+  );
 }
 
 /**

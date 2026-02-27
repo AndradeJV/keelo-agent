@@ -34,11 +34,13 @@ import {
   addOrgMemberApi,
   removeOrgMemberApi,
   transferOwnershipApi,
+  updateMemberStatusApi,
   deleteProjectApi,
   type KeeloConfig,
   type ConfigOptions,
   type Project,
   type OrgMember,
+  type MemberStatus,
 } from '../stores/api';
 import { useWorkspaceStore } from '../stores/workspace';
 
@@ -206,6 +208,19 @@ export default function Settings() {
       setOrgError('Erro de conexão');
     } finally {
       setOrgActionLoading(false);
+    }
+  }
+
+  async function handleToggleStatus(userId: string, currentStatus: MemberStatus) {
+    if (!currentOrg) return;
+    const newStatus: MemberStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    try {
+      const res = await updateMemberStatusApi(currentOrg.id, userId, newStatus);
+      if (res.success) {
+        await loadOrgData(currentOrg.id);
+      }
+    } catch {
+      setOrgError('Falha ao atualizar status');
     }
   }
 
@@ -464,33 +479,88 @@ export default function Settings() {
                       {orgMembers.map((member) => (
                         <div
                           key={member.id}
-                          className="flex items-center justify-between p-3 bg-dark-800/50 rounded-lg"
+                          className={`flex items-center justify-between p-3 bg-dark-800/50 rounded-lg ${
+                            member.status === 'inactive' ? 'opacity-50' : ''
+                          }`}
                         >
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-keelo-500 to-keelo-600 flex items-center justify-center">
-                              <span className="text-white text-xs font-medium">
-                                {(member.user_name || member.user_email || '?').charAt(0).toUpperCase()}
-                              </span>
+                            {/* Avatar with status dot */}
+                            <div className="relative">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-keelo-500 to-keelo-600 flex items-center justify-center">
+                                <span className="text-white text-xs font-medium">
+                                  {(member.user_name || member.user_email || '?').charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                              <span
+                                className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-dark-800 ${
+                                  member.status === 'active'
+                                    ? 'bg-emerald-400'
+                                    : member.status === 'invited'
+                                    ? 'bg-amber-400'
+                                    : 'bg-dark-500'
+                                }`}
+                                title={
+                                  member.status === 'active'
+                                    ? 'Ativo'
+                                    : member.status === 'invited'
+                                    ? 'Convidado'
+                                    : 'Inativo'
+                                }
+                              />
                             </div>
                             <div>
-                              <p className="text-sm font-medium text-dark-100">
-                                {member.user_name || member.user_email}
-                              </p>
                               <div className="flex items-center gap-2">
-                                <p className="text-xs text-dark-500">{member.user_email}</p>
+                                <p className="text-sm font-medium text-dark-100">
+                                  {member.user_name || member.user_email}
+                                </p>
                                 {member.role === 'owner' && (
-                                  <span className="flex items-center gap-0.5 text-xs text-amber-400">
-                                    <Crown size={10} /> Owner
+                                  <span className="flex items-center gap-0.5 text-[10px] font-medium text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-full">
+                                    <Crown size={9} /> Owner
                                   </span>
                                 )}
                                 {member.role === 'admin' && (
-                                  <span className="text-xs text-keelo-400">Admin</span>
+                                  <span className="text-[10px] font-medium text-keelo-400 bg-keelo-400/10 px-1.5 py-0.5 rounded-full">
+                                    Admin
+                                  </span>
                                 )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs text-dark-500">{member.user_email}</p>
+                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                                  member.status === 'active'
+                                    ? 'text-emerald-400 bg-emerald-400/10'
+                                    : member.status === 'invited'
+                                    ? 'text-amber-400 bg-amber-400/10'
+                                    : 'text-dark-400 bg-dark-700'
+                                }`}>
+                                  {member.status === 'active'
+                                    ? 'Ativo'
+                                    : member.status === 'invited'
+                                    ? 'Convidado'
+                                    : 'Inativo'}
+                                </span>
                               </div>
                             </div>
                           </div>
                           {member.role !== 'owner' && (
                             <div className="flex items-center gap-1">
+                              {(currentOrg?.member_role === 'owner' || currentOrg?.member_role === 'admin') && member.status !== 'invited' && (
+                                <button
+                                  onClick={() => handleToggleStatus(member.user_id, member.status)}
+                                  className={`p-1.5 transition-colors ${
+                                    member.status === 'active'
+                                      ? 'text-dark-500 hover:text-amber-400'
+                                      : 'text-dark-500 hover:text-emerald-400'
+                                  }`}
+                                  title={member.status === 'active' ? 'Desativar membro' : 'Ativar membro'}
+                                >
+                                  <div className={`w-3.5 h-3.5 rounded-full border-2 ${
+                                    member.status === 'active'
+                                      ? 'border-emerald-400 bg-emerald-400'
+                                      : 'border-dark-500'
+                                  }`} />
+                                </button>
+                              )}
                               {currentOrg?.member_role === 'owner' && (
                                 <button
                                   onClick={() => setTransferTarget(member)}

@@ -104,9 +104,12 @@ export {
   removeOrgMember,
   userHasOrgAccess,
   transferOwnership,
+  updateMemberStatus,
+  touchMemberActivity,
   type OrganizationRecord,
   type OrgMemberRecord,
   type OrganizationWithRole,
+  type MemberStatus,
 } from './repositories/organization-repository.js';
 
 export {
