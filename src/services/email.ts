@@ -46,6 +46,40 @@ export function isEmailEnabled(): boolean {
 }
 
 /**
+ * Verify SMTP connection is working.
+ */
+export async function verifyEmailConnection(): Promise<{ ok: boolean; error?: string }> {
+  if (!transporter) {
+    return { ok: false, error: 'SMTP not configured (missing SMTP_HOST, SMTP_USER, or SMTP_PASS)' };
+  }
+
+  try {
+    await transporter.verify();
+    return { ok: true };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    logger.error({ error: msg }, 'SMTP connection verification failed');
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Get email service diagnostic info (no sensitive data).
+ */
+export function getEmailDiagnostics() {
+  return {
+    configured: !!SMTP_HOST && !!SMTP_USER && !!SMTP_PASS,
+    host: SMTP_HOST || '(not set)',
+    port: SMTP_PORT,
+    user: SMTP_USER ? `${SMTP_USER.substring(0, 3)}...${SMTP_USER.includes('@') ? '@' + SMTP_USER.split('@')[1] : ''}` : '(not set)',
+    from: SMTP_FROM,
+    frontendUrl: FRONTEND_URL,
+    baseUrl: process.env.BASE_URL || '(not set — will use localhost)',
+    transporterReady: transporter !== null,
+  };
+}
+
+/**
  * Send an email.
  */
 async function sendMail(to: string, subject: string, html: string): Promise<boolean> {
@@ -55,16 +89,23 @@ async function sendMail(to: string, subject: string, html: string): Promise<bool
   }
 
   try {
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: SMTP_FROM,
       to,
       subject,
       html,
     });
-    logger.info({ to, subject }, 'Email sent successfully');
+    logger.info({ to, subject, messageId: info.messageId, response: info.response }, 'Email sent successfully');
     return true;
   } catch (error) {
-    logger.error({ error, to, subject }, 'Failed to send email');
+    logger.error({ 
+      error: error instanceof Error ? error.message : error, 
+      to, 
+      subject,
+      smtpHost: SMTP_HOST,
+      smtpPort: SMTP_PORT,
+      smtpUser: SMTP_USER,
+    }, 'Failed to send email');
     return false;
   }
 }

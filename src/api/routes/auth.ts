@@ -13,7 +13,7 @@ import {
   regenerateVerificationToken,
 } from '../../database/index.js';
 import { signToken, requireAuth } from '../middleware/auth.js';
-import { sendVerificationEmail, isEmailEnabled, FRONTEND_URL } from '../../services/email.js';
+import { sendVerificationEmail, isEmailEnabled, verifyEmailConnection, getEmailDiagnostics, FRONTEND_URL } from '../../services/email.js';
 
 // =============================================================================
 // Google OAuth Client
@@ -480,6 +480,22 @@ router.get('/github/config', (_req: Request, res: Response) => {
   res.json({
     clientId: GITHUB_CLIENT_ID || null,
     configured: !!GITHUB_CLIENT_ID,
+  });
+});
+
+/**
+ * GET /auth/email-diagnostics
+ * 
+ * Returns email service diagnostics (for debugging).
+ * Tests SMTP connection.
+ */
+router.get('/email-diagnostics', async (_req: Request, res: Response) => {
+  const diagnostics = getEmailDiagnostics();
+  const verification = await verifyEmailConnection();
+
+  res.json({
+    ...diagnostics,
+    smtpConnection: verification,
   });
 });
 
