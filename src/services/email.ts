@@ -1,156 +1,188 @@
 import nodemailer from 'nodemailer';
 import dns from 'node:dns';
+import { Resend } from 'resend';
 import { logger } from '../config/index.js';
 
 // =============================================================================
 // Email Service Configuration
 // =============================================================================
+// Priority: RESEND_API_KEY (HTTP API, works everywhere) > SMTP (may be blocked)
+// =============================================================================
 
+// Resend config (recommended for cloud providers like Render)
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+
+// SMTP config (fallback)
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
-const SMTP_FROM = process.env.SMTP_FROM || `Keelo <${SMTP_USER || 'noreply@keelo.dev'}>`;
+
+// Shared config
+const EMAIL_FROM = process.env.SMTP_FROM || process.env.EMAIL_FROM || `Keelo <onboarding@resend.dev>`;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-let transporter: nodemailer.Transporter | null = null;
+// Provider state
+let emailProvider: 'resend' | 'smtp' | null = null;
+let resendClient: Resend | null = null;
+let smtpTransporter: nodemailer.Transporter | null = null;
+
+// =============================================================================
+// Initialization
+// =============================================================================
 
 /**
- * Resolve a hostname to its IPv4 address.
- * Cloud providers like Render don't support IPv6 outbound, so smtp.gmail.com
- * (which resolves to IPv6 first) fails with ENETUNREACH.
- */
-async function resolveIPv4(hostname: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    dns.lookup(hostname, { family: 4 }, (err, address) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(address);
-      }
-    });
-  });
-}
-
-/**
- * Initialize the email transporter.
- * Returns true if email is configured and ready.
+ * Initialize the email service.
+ * Tries Resend first (HTTP API, no port restrictions), then SMTP as fallback.
  */
 export async function initEmailService(): Promise<boolean> {
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    logger.warn('SMTP not configured (SMTP_HOST, SMTP_USER, SMTP_PASS) — email sending disabled');
-    return false;
+  // 1. Try Resend (HTTP-based — works on all cloud providers)
+  if (RESEND_API_KEY) {
+    try {
+      resendClient = new Resend(RESEND_API_KEY);
+      emailProvider = 'resend';
+      logger.info('Email service initialized with Resend (HTTP API)');
+      return true;
+    } catch (error) {
+      logger.error({ error: (error as Error).message }, 'Failed to initialize Resend');
+    }
   }
 
-  try {
-    // Resolve hostname to IPv4 to avoid IPv6 issues on cloud providers (Render, etc.)
-    let smtpHost = SMTP_HOST;
+  // 2. Fallback to SMTP
+  if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
     try {
-      const ipv4 = await resolveIPv4(SMTP_HOST);
-      logger.info({ originalHost: SMTP_HOST, resolvedIPv4: ipv4 }, 'Resolved SMTP host to IPv4');
-      smtpHost = ipv4;
-    } catch (dnsErr) {
-      logger.warn({ host: SMTP_HOST, error: (dnsErr as Error).message }, 'Could not resolve SMTP host to IPv4, using original hostname');
+      // Resolve hostname to IPv4 to avoid IPv6 issues on cloud providers
+      let smtpHost = SMTP_HOST;
+      try {
+        const ipv4 = await resolveIPv4(SMTP_HOST);
+        logger.info({ originalHost: SMTP_HOST, resolvedIPv4: ipv4 }, 'Resolved SMTP host to IPv4');
+        smtpHost = ipv4;
+      } catch {
+        logger.warn({ host: SMTP_HOST }, 'Could not resolve SMTP host to IPv4, using original hostname');
+      }
+
+      smtpTransporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: SMTP_PORT,
+        secure: SMTP_PORT === 465,
+        auth: { user: SMTP_USER, pass: SMTP_PASS },
+        name: SMTP_HOST,
+        tls: { servername: SMTP_HOST },
+      });
+
+      // Verify connection (non-blocking — log result but don't fail)
+      try {
+        await smtpTransporter.verify();
+        logger.info({ host: smtpHost, port: SMTP_PORT }, 'SMTP connection verified');
+      } catch (verifyErr) {
+        logger.error({ error: (verifyErr as Error).message }, 'SMTP verification failed — emails via SMTP may not work');
+      }
+
+      emailProvider = 'smtp';
+      logger.info({ host: smtpHost, port: SMTP_PORT, user: SMTP_USER }, 'Email service initialized with SMTP');
+      return true;
+    } catch (error) {
+      logger.error({ error: (error as Error).message }, 'Failed to initialize SMTP transport');
     }
-
-    transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: SMTP_PORT,
-      secure: SMTP_PORT === 465,
-      auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS,
-      },
-      // Send the original hostname in EHLO/HELO, not the IP
-      name: SMTP_HOST,
-      tls: {
-        // Gmail expects the certificate to match smtp.gmail.com, not the IP
-        servername: SMTP_HOST,
-      },
-    });
-
-    // Verify SMTP connection at startup
-    try {
-      await transporter.verify();
-      logger.info({ host: smtpHost, port: SMTP_PORT, user: SMTP_USER }, 'Email service initialized and SMTP connection verified');
-    } catch (verifyErr) {
-      logger.error({ error: (verifyErr as Error).message, host: smtpHost, port: SMTP_PORT }, 'SMTP connection verification failed — emails may not work');
-    }
-
-    return true;
-  } catch (error) {
-    logger.error({ error: (error as Error).message }, 'Failed to initialize email service');
-    return false;
   }
+
+  logger.warn('No email provider configured. Set RESEND_API_KEY (recommended) or SMTP_HOST/SMTP_USER/SMTP_PASS');
+  return false;
 }
 
-/**
- * Check if email service is available.
- */
+// =============================================================================
+// Public API
+// =============================================================================
+
 export function isEmailEnabled(): boolean {
-  return transporter !== null;
+  return emailProvider !== null;
 }
 
-/**
- * Verify SMTP connection is working.
- */
 export async function verifyEmailConnection(): Promise<{ ok: boolean; error?: string }> {
-  if (!transporter) {
-    return { ok: false, error: 'SMTP not configured (missing SMTP_HOST, SMTP_USER, or SMTP_PASS)' };
+  if (emailProvider === 'resend' && resendClient) {
+    // Resend uses HTTP API, so we just check if the key is set
+    return { ok: true };
   }
 
-  try {
-    await transporter.verify();
-    return { ok: true };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    logger.error({ error: msg }, 'SMTP connection verification failed');
-    return { ok: false, error: msg };
+  if (emailProvider === 'smtp' && smtpTransporter) {
+    try {
+      await smtpTransporter.verify();
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
   }
+
+  return { ok: false, error: 'No email provider configured' };
 }
 
-/**
- * Get email service diagnostic info (no sensitive data).
- */
 export function getEmailDiagnostics() {
   return {
-    configured: !!SMTP_HOST && !!SMTP_USER && !!SMTP_PASS,
-    host: SMTP_HOST || '(not set)',
-    port: SMTP_PORT,
-    user: SMTP_USER ? `${SMTP_USER.substring(0, 3)}...${SMTP_USER.includes('@') ? '@' + SMTP_USER.split('@')[1] : ''}` : '(not set)',
-    from: SMTP_FROM,
+    provider: emailProvider || 'none',
+    configured: emailProvider !== null,
+    resend: {
+      apiKeySet: !!RESEND_API_KEY,
+    },
+    smtp: {
+      host: SMTP_HOST || '(not set)',
+      port: SMTP_PORT,
+      user: SMTP_USER 
+        ? `${SMTP_USER.substring(0, 3)}...${SMTP_USER.includes('@') ? '@' + SMTP_USER.split('@')[1] : ''}` 
+        : '(not set)',
+    },
+    from: EMAIL_FROM,
     frontendUrl: FRONTEND_URL,
     baseUrl: process.env.BASE_URL || '(not set — will use localhost)',
-    transporterReady: transporter !== null,
   };
 }
 
-/**
- * Send an email.
- */
+// =============================================================================
+// Email Sending
+// =============================================================================
+
 async function sendMail(to: string, subject: string, html: string): Promise<boolean> {
-  if (!transporter) {
-    logger.warn({ to, subject }, 'Email not sent — SMTP not configured');
+  if (!emailProvider) {
+    logger.warn({ to, subject }, 'Email not sent — no email provider configured');
     return false;
   }
 
   try {
-    const info = await transporter.sendMail({
-      from: SMTP_FROM,
+    if (emailProvider === 'resend' && resendClient) {
+      const { error } = await resendClient.emails.send({
+        from: EMAIL_FROM,
+        to: [to],
+        subject,
+        html,
+      });
+
+      if (error) {
+        logger.error({ error, to, subject }, 'Resend: failed to send email');
+        return false;
+      }
+
+      logger.info({ to, subject, provider: 'resend' }, 'Email sent successfully');
+      return true;
+    }
+
+    if (emailProvider === 'smtp' && smtpTransporter) {
+      const info = await smtpTransporter.sendMail({
+        from: EMAIL_FROM,
+        to,
+        subject,
+        html,
+      });
+
+      logger.info({ to, subject, messageId: info.messageId, provider: 'smtp' }, 'Email sent successfully');
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    logger.error({
+      error: error instanceof Error ? error.message : error,
       to,
       subject,
-      html,
-    });
-    logger.info({ to, subject, messageId: info.messageId, response: info.response }, 'Email sent successfully');
-    return true;
-  } catch (error) {
-    logger.error({ 
-      error: error instanceof Error ? error.message : error, 
-      to, 
-      subject,
-      smtpHost: SMTP_HOST,
-      smtpPort: SMTP_PORT,
-      smtpUser: SMTP_USER,
+      provider: emailProvider,
     }, 'Failed to send email');
     return false;
   }
@@ -220,6 +252,19 @@ export async function sendVerificationEmail(
 </html>`;
 
   return sendMail(email, 'Confirme seu email — Keelo', html);
+}
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+async function resolveIPv4(hostname: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    dns.lookup(hostname, { family: 4 }, (err, address) => {
+      if (err) reject(err);
+      else resolve(address);
+    });
+  });
 }
 
 export { FRONTEND_URL };
