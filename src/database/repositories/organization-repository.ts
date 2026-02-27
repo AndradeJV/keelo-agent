@@ -1,4 +1,4 @@
-import { queryOne, queryAll, isDatabaseEnabled } from '../connection.js';
+import { queryOne, queryAll, isDatabaseEnabled, getPool } from '../connection.js';
 import { logger } from '../../config/index.js';
 
 // =============================================================================
@@ -278,5 +278,74 @@ export async function userHasOrgAccess(organizationId: string, userId: string): 
   if (!isDatabaseEnabled()) return false;
   const membership = await getOrgMembership(organizationId, userId);
   return !!membership;
+}
+
+/**
+ * Transfer ownership of an organization to another member.
+ * The current owner becomes admin, the new owner becomes owner.
+ * Uses a database transaction to ensure atomicity.
+ */
+export async function transferOwnership(
+  organizationId: string,
+  currentOwnerId: string,
+  newOwnerId: string
+): Promise<void> {
+  if (!isDatabaseEnabled()) throw new Error('Database not enabled');
+
+  // Verify current user is the owner
+  const currentMembership = await getOrgMembership(organizationId, currentOwnerId);
+  if (!currentMembership || currentMembership.role !== 'owner') {
+    throw new Error('Apenas o dono atual pode transferir a propriedade');
+  }
+
+  // Verify new owner is a member
+  const newOwnerMembership = await getOrgMembership(organizationId, newOwnerId);
+  if (!newOwnerMembership) {
+    throw new Error('O novo dono precisa ser membro da organização');
+  }
+
+  // Can't transfer to yourself
+  if (currentOwnerId === newOwnerId) {
+    throw new Error('Você já é o dono desta organização');
+  }
+
+  const pool = getPool();
+  if (!pool) throw new Error('Database pool not available');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Update organization owner_id
+    await client.query(
+      'UPDATE organizations SET owner_id = $1 WHERE id = $2',
+      [newOwnerId, organizationId]
+    );
+
+    // 2. Demote current owner to admin
+    await client.query(
+      `UPDATE org_members SET role = 'admin' WHERE organization_id = $1 AND user_id = $2`,
+      [organizationId, currentOwnerId]
+    );
+
+    // 3. Promote new owner
+    await client.query(
+      `UPDATE org_members SET role = 'owner' WHERE organization_id = $1 AND user_id = $2`,
+      [organizationId, newOwnerId]
+    );
+
+    await client.query('COMMIT');
+
+    logger.info(
+      { orgId: organizationId, from: currentOwnerId, to: newOwnerId },
+      'Organization ownership transferred'
+    );
+  } catch (error) {
+    await client.query('ROLLBACK');
+    logger.error({ error, orgId: organizationId }, 'Failed to transfer ownership');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 

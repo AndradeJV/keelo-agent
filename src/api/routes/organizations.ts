@@ -11,6 +11,7 @@ import {
   addOrgMember,
   removeOrgMember,
   getOrgMembership,
+  transferOwnership,
   findUserByEmail,
   getOrgProjects,
   createProject,
@@ -320,6 +321,37 @@ router.delete('/:orgId/members/:userId', requireDatabase, requireOrgAdmin, async
     logger.error({ error }, 'Failed to remove member');
     res.status(400).json({
       error: 'Falha ao remover membro',
+      details: error instanceof Error ? error.message : 'Erro desconhecido',
+    });
+  }
+});
+
+/**
+ * POST /organizations/:orgId/transfer-ownership
+ * Transfer ownership to another member (owner only)
+ */
+router.post('/:orgId/transfer-ownership', requireDatabase, async (req: Request, res: Response) => {
+  try {
+    const currentUserId = req.user?.id;
+    if (!currentUserId) {
+      return res.status(401).json({ error: 'Não autenticado' });
+    }
+
+    const { newOwnerId } = req.body;
+    if (!newOwnerId) {
+      return res.status(400).json({ error: 'ID do novo dono é obrigatório' });
+    }
+
+    await transferOwnership(req.params.orgId, currentUserId, newOwnerId);
+
+    res.json({
+      success: true,
+      message: 'Propriedade transferida com sucesso',
+    });
+  } catch (error) {
+    logger.error({ error }, 'Failed to transfer ownership');
+    res.status(400).json({
+      error: 'Falha ao transferir propriedade',
       details: error instanceof Error ? error.message : 'Erro desconhecido',
     });
   }

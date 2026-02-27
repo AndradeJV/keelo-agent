@@ -21,6 +21,7 @@ import {
   Crown,
   UserPlus,
   Mail,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { 
   getSettings, 
@@ -32,6 +33,7 @@ import {
   getOrgMembers,
   addOrgMemberApi,
   removeOrgMemberApi,
+  transferOwnershipApi,
   deleteProjectApi,
   type KeeloConfig,
   type ConfigOptions,
@@ -59,6 +61,7 @@ export default function Settings() {
   const [orgError, setOrgError] = useState<string | null>(null);
   const [orgSuccess, setOrgSuccess] = useState<string | null>(null);
   const [activeOrgTab, setActiveOrgTab] = useState<'projects' | 'members'>('projects');
+  const [transferTarget, setTransferTarget] = useState<OrgMember | null>(null);
 
   useEffect(() => {
     loadData();
@@ -179,6 +182,30 @@ export default function Settings() {
       }
     } catch {
       setOrgError('Falha ao remover membro');
+    }
+  }
+
+  async function handleTransferOwnership() {
+    if (!currentOrg || !transferTarget) return;
+
+    setOrgActionLoading(true);
+    setOrgError(null);
+    try {
+      const res = await transferOwnershipApi(currentOrg.id, transferTarget.user_id);
+      if (res.success) {
+        setTransferTarget(null);
+        setOrgSuccess('Propriedade transferida com sucesso!');
+        setTimeout(() => setOrgSuccess(null), 3000);
+        await loadOrgData(currentOrg.id);
+        // Reload the page to reflect new ownership in all components
+        window.location.reload();
+      } else {
+        setOrgError(res.details || res.error || 'Falha ao transferir propriedade');
+      }
+    } catch {
+      setOrgError('Erro de conexão');
+    } finally {
+      setOrgActionLoading(false);
     }
   }
 
@@ -463,13 +490,24 @@ export default function Settings() {
                             </div>
                           </div>
                           {member.role !== 'owner' && (
-                            <button
-                              onClick={() => handleRemoveMember(member.user_id)}
-                              className="p-1.5 text-dark-500 hover:text-red-400 transition-colors"
-                              title="Remover membro"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              {currentOrg?.member_role === 'owner' && (
+                                <button
+                                  onClick={() => setTransferTarget(member)}
+                                  className="p-1.5 text-dark-500 hover:text-amber-400 transition-colors"
+                                  title="Transferir propriedade"
+                                >
+                                  <ArrowRightLeft size={14} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleRemoveMember(member.user_id)}
+                                className="p-1.5 text-dark-500 hover:text-red-400 transition-colors"
+                                title="Remover membro"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           )}
                         </div>
                       ))}
@@ -841,6 +879,73 @@ export default function Settings() {
           </div>
         </Section>
       </div>
+
+      {/* Transfer Ownership Confirmation Modal */}
+      {transferTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-dark-900 border border-dark-700 rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                <ArrowRightLeft className="w-5 h-5 text-amber-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-dark-100">Transferir Propriedade</h3>
+            </div>
+
+            <p className="text-dark-300 text-sm mb-2">
+              Você está prestes a transferir a propriedade de{' '}
+              <span className="font-semibold text-dark-100">{currentOrg?.name}</span>{' '}
+              para:
+            </p>
+
+            <div className="flex items-center gap-3 p-3 bg-dark-800 rounded-lg mb-4">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-keelo-500 to-keelo-600 flex items-center justify-center">
+                <span className="text-white text-xs font-medium">
+                  {(transferTarget.user_name || transferTarget.user_email || '?').charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-dark-100">
+                  {transferTarget.user_name || transferTarget.user_email}
+                </p>
+                <p className="text-xs text-dark-500">{transferTarget.user_email}</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg mb-6">
+              <p className="text-xs text-amber-300">
+                <strong>Atenção:</strong> Após a transferência, você será rebaixado para Admin.
+                Apenas o novo dono poderá transferir a propriedade novamente ou excluir a organização.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setTransferTarget(null)}
+                disabled={orgActionLoading}
+                className="flex-1 px-4 py-2.5 bg-dark-800 hover:bg-dark-700 border border-dark-700 text-dark-300 rounded-lg text-sm font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleTransferOwnership}
+                disabled={orgActionLoading}
+                className="flex-1 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {orgActionLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ArrowRightLeft className="w-4 h-4" />
+                )}
+                Confirmar Transferência
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

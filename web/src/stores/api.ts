@@ -810,6 +810,14 @@ export async function removeOrgMemberApi(orgId: string, userId: string): Promise
   return response.json();
 }
 
+export async function transferOwnershipApi(orgId: string, newOwnerId: string): Promise<{ success: boolean; message?: string; error?: string; details?: string }> {
+  const response = await fetchWithAuth(`/organizations/${orgId}/transfer-ownership`, {
+    method: 'POST',
+    body: JSON.stringify({ newOwnerId }),
+  });
+  return response.json();
+}
+
 // =============================================================================
 // Projects API
 // =============================================================================

@@ -103,6 +103,7 @@ export {
   addOrgMember,
   removeOrgMember,
   userHasOrgAccess,
+  transferOwnership,
   type OrganizationRecord,
   type OrgMemberRecord,
   type OrganizationWithRole,
