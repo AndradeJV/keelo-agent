@@ -319,6 +319,75 @@ export async function sendPasswordResetEmail(
   return sendMail(email, 'Redefinir senha — Keelo', html);
 }
 
+/**
+ * Send organization invitation email.
+ */
+export async function sendOrgInvitationEmail(
+  email: string,
+  recipientName: string,
+  inviterName: string,
+  orgName: string,
+): Promise<boolean> {
+  const loginUrl = `${FRONTEND_URL}/login`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #020617; color: #f1f5f9; }
+    .container { max-width: 560px; margin: 0 auto; padding: 40px 24px; }
+    .header { text-align: center; margin-bottom: 32px; }
+    .logo { display: inline-block; background: linear-gradient(135deg, #34d399, #059669); border-radius: 12px; width: 48px; height: 48px; line-height: 48px; font-size: 24px; font-weight: bold; color: white; text-align: center; }
+    .title { font-size: 24px; font-weight: 700; color: #f1f5f9; margin: 16px 0 4px; }
+    .subtitle { color: #94a3b8; font-size: 14px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 32px 24px; }
+    .greeting { font-size: 16px; color: #e2e8f0; margin-bottom: 16px; }
+    .text { font-size: 14px; color: #94a3b8; line-height: 1.6; margin-bottom: 24px; }
+    .org-name { display: inline-block; background: #10b98120; border: 1px solid #10b98140; color: #34d399; padding: 4px 12px; border-radius: 6px; font-weight: 600; font-size: 14px; }
+    .btn { display: inline-block; background: linear-gradient(135deg, #10b981, #059669); color: white !important; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; }
+    .btn-wrapper { text-align: center; margin: 24px 0; }
+    .small { font-size: 12px; color: #64748b; margin-top: 24px; line-height: 1.5; }
+    .footer { text-align: center; margin-top: 32px; font-size: 12px; color: #475569; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">✓</div>
+      <div class="title">Keelo</div>
+      <div class="subtitle">QA Intelligence Platform</div>
+    </div>
+    <div class="card">
+      <div class="greeting">Olá, ${recipientName}! 👋</div>
+      <div class="text">
+        <strong>${inviterName}</strong> convidou você para participar da organização:
+      </div>
+      <div style="text-align: center; margin: 16px 0 24px;">
+        <span class="org-name">${orgName}</span>
+      </div>
+      <div class="text">
+        Faça login no Keelo para aceitar o convite e começar a colaborar com sua equipe.
+      </div>
+      <div class="btn-wrapper">
+        <a href="${loginUrl}" class="btn">Acessar o Keelo</a>
+      </div>
+      <div class="small">
+        Se você não reconhece este convite, ignore este email.
+      </div>
+    </div>
+    <div class="footer">
+      © ${new Date().getFullYear()} Keelo — Autonomous QA Agent
+    </div>
+  </div>
+</body>
+</html>`;
+
+  return sendMail(email, `Convite para ${orgName} — Keelo`, html);
+}
+
 // =============================================================================
 // Helpers
 // =============================================================================

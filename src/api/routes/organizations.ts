@@ -13,6 +13,8 @@ import {
   getOrgMembership,
   transferOwnership,
   updateMemberStatus,
+  countOwnedOrganizations,
+  getUserOrgCreationLimit,
   findUserByEmail,
   type MemberStatus,
   getOrgProjects,
@@ -22,6 +24,8 @@ import {
   deleteProject,
   userHasProjectAccess,
 } from '../../database/index.js';
+
+import { sendOrgInvitationEmail, isEmailEnabled } from '../../services/email.js';
 
 const router = Router();
 
@@ -134,6 +138,20 @@ router.post('/', requireDatabase, async (req: Request, res: Response) => {
       return res.status(400).json({
         error: 'Nome e slug são obrigatórios',
       });
+    }
+
+    // Check org creation limit (based on plan)
+    if (req.user?.role !== 'admin') {
+      const ownedCount = await countOwnedOrganizations(userId);
+      const limit = await getUserOrgCreationLimit(userId);
+      if (ownedCount >= limit) {
+        return res.status(403).json({
+          error: 'Limite de organizações atingido',
+          message: `Seu plano permite criar até ${limit} organização(ões). Faça upgrade para criar mais.`,
+          current: ownedCount,
+          limit,
+        });
+      }
     }
 
     const org = await createOrganization({
@@ -287,6 +305,22 @@ router.post('/:orgId/members', requireDatabase, requireOrgAdmin, async (req: Req
       role: role || 'member',
       invitedBy: inviterId,
     });
+
+    // Send invitation email
+    if (isEmailEnabled()) {
+      try {
+        const org = await getOrganizationById(req.params.orgId);
+        const inviterName = req.user?.name || req.user?.email || 'Alguém';
+        const recipientName = user.name || user.email.split('@')[0];
+        const orgName = org?.name || 'uma organização';
+
+        await sendOrgInvitationEmail(user.email, recipientName, inviterName, orgName);
+        logger.info({ to: user.email, orgId: req.params.orgId }, 'Invitation email sent');
+      } catch (emailError) {
+        // Don't fail the invite if email fails
+        logger.error({ error: emailError }, 'Failed to send invitation email (member was still added)');
+      }
+    }
 
     res.status(201).json({
       success: true,

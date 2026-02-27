@@ -91,6 +91,42 @@ export async function createOrganization(data: {
 }
 
 /**
+ * Count how many organizations a user OWNS (not just belongs to).
+ * Used to enforce creation limits based on plan.
+ */
+export async function countOwnedOrganizations(userId: string): Promise<number> {
+  if (!isDatabaseEnabled()) return 0;
+
+  const result = await queryOne<{ count: string }>(
+    `SELECT COUNT(*) as count FROM org_members WHERE user_id = $1 AND role = 'owner'`,
+    [userId]
+  );
+
+  return parseInt(result?.count || '0', 10);
+}
+
+/**
+ * Get the org creation limit for a user based on their best plan.
+ * Uses the highest max_organizations across all orgs the user owns.
+ */
+export async function getUserOrgCreationLimit(userId: string): Promise<number> {
+  if (!isDatabaseEnabled()) return 1;
+
+  const result = await queryOne<{ max_orgs: string | null }>(
+    `SELECT MAX(p.max_organizations) as max_orgs
+     FROM organizations o
+     JOIN plans p ON p.id = o.plan_id
+     JOIN org_members om ON om.organization_id = o.id
+     WHERE om.user_id = $1 AND om.role = 'owner'`,
+    [userId]
+  );
+
+  // If user has no orgs yet, default limit is 1 (starter plan)
+  if (!result?.max_orgs) return 1;
+  return parseInt(result.max_orgs, 10);
+}
+
+/**
  * Get organization by ID
  */
 export async function getOrganizationById(id: string): Promise<OrganizationRecord | null> {

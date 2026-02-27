@@ -106,6 +106,8 @@ export {
   transferOwnership,
   updateMemberStatus,
   touchMemberActivity,
+  countOwnedOrganizations,
+  getUserOrgCreationLimit,
   type OrganizationRecord,
   type OrgMemberRecord,
   type OrganizationWithRole,

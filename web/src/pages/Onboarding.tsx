@@ -79,7 +79,7 @@ export default function Onboarding() {
         setOrganizations([res.data as any]);
         setStep('project');
       } else {
-        setOrgError(res.error || 'Falha ao criar organização');
+        setOrgError((res as any).message || res.error || 'Falha ao criar organização');
       }
     } catch (err) {
       setOrgError('Erro de conexão. Tente novamente.');

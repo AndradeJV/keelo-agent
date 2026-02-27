@@ -126,6 +126,7 @@ router.post('/google', async (req: Request, res: Response) => {
     const token = signToken({
       id: user.id,
       email: user.email,
+      name: user.name || undefined,
       role: user.role,
     });
 
@@ -245,6 +246,7 @@ router.post('/github', async (req: Request, res: Response) => {
     const token = signToken({
       id: user.id,
       email: user.email,
+      name: user.name || undefined,
       role: user.role,
     });
 
@@ -448,6 +450,7 @@ router.post('/login', async (req: Request, res: Response) => {
     const token = signToken({
       id: user.id,
       email: user.email,
+      name: user.name || undefined,
       role: user.role,
     });
 
